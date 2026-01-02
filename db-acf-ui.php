@@ -72,38 +72,44 @@ add_action( 'plugins_loaded', function () {
  * ---------------------------
  */
 
-add_filter( 'pre_set_site_transient_update_plugins', function( $transient ) {
+add_filter('pre_set_site_transient_update_plugins', function($transient) {
 
-    if ( empty( $transient->checked ) ) {
+    if (empty($transient->checked)) {
         return $transient;
     }
 
-    $plugin_slug = plugin_basename( DB_ACF_UI_FILE );
+    $plugin_slug = plugin_basename(DB_ACF_UI_FILE);
 
-    // Laatste tag hardcoded via API check
-    $url = 'https://api.bitbucket.org/2.0/repositories/digitale-bazen/db-acf-extension/refs/tags?sort=-name&pagelen=1';
+    $url = 'https://api.bitbucket.org/2.0/repositories/digitale-bazen/db-acf-extension/refs/tags';
 
-    $response = wp_remote_get( $url, [
-        'headers' => [ 'User-Agent' => 'WordPress' ],
+    $response = wp_remote_get($url, [
+        'headers' => ['User-Agent' => 'WordPress'],
         'timeout' => 20,
-    ] );
+    ]);
 
-    if ( is_wp_error( $response ) ) {
+    if (is_wp_error($response)) {
         return $transient;
     }
 
-    $data = json_decode( wp_remote_retrieve_body( $response ) );
+    $data = json_decode(wp_remote_retrieve_body($response));
 
-    if ( empty( $data->values[0]->name ) ) {
+    if (empty($data->values)) {
         return $transient;
     }
 
-    $latest_tag = $data->values[0]->name;
-    $remote_version = ltrim( $latest_tag, 'v' );
+    // Vind de hoogste versie
+    $latest_tag = '';
+    foreach ($data->values as $tag) {
+        $ver = ltrim($tag->name, 'v');
+        if (!$latest_tag || version_compare($ver, ltrim($latest_tag, 'v'), '>')) {
+            $latest_tag = $tag->name;
+        }
+    }
 
-    if ( version_compare( $remote_version, DB_ACF_UI_VERSION, '>' ) ) {
+    $remote_version = ltrim($latest_tag, 'v');
 
-        $transient->response[ $plugin_slug ] = (object) [
+    if (version_compare($remote_version, DB_ACF_UI_VERSION, '>')) {
+        $transient->response[$plugin_slug] = (object)[
             'slug'        => DB_ACF_UI_SLUG,
             'plugin'      => $plugin_slug,
             'new_version' => $remote_version,
@@ -113,29 +119,47 @@ add_filter( 'pre_set_site_transient_update_plugins', function( $transient ) {
     }
 
     return $transient;
-} );
-
+});
 
 // Plugin info popup
-add_filter( 'plugins_api', function( $res, $action, $args ) {
+add_filter('plugins_api', function($res, $action, $args) {
 
-    if ( $action !== 'plugin_information' || $args->slug !== DB_ACF_UI_SLUG ) {
+    if ($action !== 'plugin_information' || $args->slug !== DB_ACF_UI_SLUG) {
         return $res;
     }
 
-    $latest_tag = 'v1.1.6'; // fallback, kan ook dynamisch via API
+    $url = 'https://api.bitbucket.org/2.0/repositories/digitale-bazen/db-acf-extension/refs/tags';
+    $response = wp_remote_get($url, [
+        'headers' => ['User-Agent' => 'WordPress'],
+        'timeout' => 20,
+    ]);
 
-    return (object) [
+    $latest_tag = DB_ACF_UI_VERSION; // fallback
+    if (!is_wp_error($response)) {
+        $data = json_decode(wp_remote_retrieve_body($response));
+        if (!empty($data->values)) {
+            foreach ($data->values as $tag) {
+                $ver = ltrim($tag->name, 'v');
+                if (version_compare($ver, ltrim($latest_tag, 'v'), '>')) {
+                    $latest_tag = $tag->name;
+                }
+            }
+        }
+    }
+
+    $remote_version = ltrim($latest_tag, 'v');
+
+    return (object)[
         'name'          => 'DB ACF Extension',
         'slug'          => DB_ACF_UI_SLUG,
-        'version'       => ltrim( $latest_tag, 'v' ),
+        'version'       => $remote_version,
         'author'        => 'Digitale Bazen',
         'homepage'      => 'https://bitbucket.org/digitale-bazen/db-acf-extension',
         'download_link' => 'https://bitbucket.org/digitale-bazen/db-acf-extension/get/' . $latest_tag . '.zip',
         'sections'      => [
             'description' => 'Aangepaste ACF interface voor Digitale Bazen.',
-            'changelog'   => '', // kan je eventueel hier vullen met changelog uit file
+            'changelog'   => '', // eventueel hier dynamisch changelog vullen
         ],
     ];
 
-}, 20, 3 );
+}, 20, 3);
