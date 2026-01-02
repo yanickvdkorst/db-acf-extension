@@ -2,7 +2,7 @@
 /*
 Plugin Name: DB ACF Extension
 Description: Aangepaste ACF interface voor Digitale Bazen
-Version: 1.2.3
+Version: 1.2.4
 Author: Digitale Bazen
 Text Domain: db-acf-ui
 Update URI: bitbucket.org/digitale-bazen/db-acf-extension
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------
  */
-define( 'DB_ACF_UI_VERSION', '1.2.3' );
+define( 'DB_ACF_UI_VERSION', '1.2.4' );
 define( 'DB_ACF_UI_MIN_PHP_VERSION', '8.0' );
 
 define( 'DB_ACF_UI_FILE', __FILE__ );
@@ -129,66 +129,64 @@ add_filter('pre_set_site_transient_update_plugins', function($transient) {
 
 
 
+
 /**
- * Forceer vaste pluginmapnaam na uitpakken van Bitbucket ZIP (met backup/restore).
+ * Forceer vaste pluginmapnaam na uitpakken van Bitbucket ZIP (rename binnen $remote_source).
  */
 add_filter('upgrader_source_selection', function ($source, $remote_source, $upgrader, $hook_extra) {
 
     // Alleen ingrijpen bij plugin install/update
-    $is_plugin_op = isset($hook_extra['type']) && $hook_extra['type'] === 'plugin';
-    if (!$is_plugin_op) {
+    if (!isset($hook_extra['type']) || $hook_extra['type'] !== 'plugin') {
         return $source;
     }
 
+    // Optioneel: grijp alleen in voor deze specifieke plugin/update-call
+    // - bij bulk updates staat 'plugins' (array) in $hook_extra
+    // - bij single update staat 'plugin' (string) in $hook_extra
+    $target_basename = plugin_basename(DB_ACF_UI_FILE); // bijv. 'db-acf-extension/db-acf-ui.php'
+    $targets = [];
+    if (!empty($hook_extra['plugins']) && is_array($hook_extra['plugins'])) {
+        $targets = $hook_extra['plugins'];
+    } elseif (!empty($hook_extra['plugin'])) {
+        $targets = [$hook_extra['plugin']];
+    }
+    if ($targets && !in_array($target_basename, $targets, true)) {
+        // Niet onze plugin → niet ingrijpen
+        return $source;
+    }
+
+    // Gewenste vaste directorynaam voor de root van je ZIP
     $desired_folder_name = 'db-acf-extension';
 
     global $wp_filesystem;
-
-    if (!$wp_filesystem || !is_object($upgrader) || !isset($upgrader->skin)) {
-        return $source; // geen veilige context
+    if (!$wp_filesystem) {
+        return $source;
     }
 
-    $plugins_dir  = trailingslashit($upgrader->skin->plugins_dir);
-    $desired_path = trailingslashit($plugins_dir . $desired_folder_name);
-
-    // Als bron al de gewenste naam heeft -> niets doen
+    // Als de huidige bronmap al de gewenste naam heeft → niets doen
     if (basename($source) === $desired_folder_name) {
         return $source;
     }
 
-    // ---- Backup naam (timestamp) ----
-    // Wil je een vaste suffix? Vervang $backup_suffix door bijvoorbeeld 'IT-gids-studenten-website'
-    $backup_suffix = gmdate('Ymd-His');
-    $backup_path   = untrailingslashit($desired_path) . '-backup-' . $backup_suffix . '/';
+    // Hernoem binnen de tijdelijke unpack-locatie
+    // Voorbeeld: $remote_source = '/.../wp-content/upgrade/db-acf-extension-<hash>/'
+    //            $source        = '/.../wp-content/upgrade/db-acf-extension-<hash>/digitale-bazen-db-acf-extension-<hash>/'
+    $new_source = trailingslashit($remote_source) . $desired_folder_name . '/';
 
-    // Bestaat de doelmap? -> eerst veilig wegzetten als backup (rename)
-    if ($wp_filesystem->is_dir($desired_path)) {
-        // Maak desnoods de parent dir klaar (normaal al aanwezig)
-        // Rename i.p.v. delete (veiliger)
-        if (!$wp_filesystem->move($desired_path, $backup_path, true)) {
-            // Backup rename faalde -> laat origineel staan en niet ingrijpen
-            return $source;
-        }
+    // Bestaat er al een map met de gewenste naam in $remote_source? → verwijder om ruimte te maken
+    if ($wp_filesystem->is_dir($new_source)) {
+        $wp_filesystem->delete($new_source, true);
     }
 
-    // Probeer de uitgepakte bronmap te verplaatsen/hernoemen naar de vaste naam
-    $moved = $wp_filesystem->move($source, $desired_path, true);
+    // Verplaats/rename de uitgepakte bronmap naar de vaste naam binnen $remote_source
+    $moved = $wp_filesystem->move($source, $new_source, true);
 
     if ($moved) {
-        // Move gelukt -> backup opruimen (niet verplicht, maar netjes)
-        if ($wp_filesystem->is_dir($backup_path)) {
-            $wp_filesystem->delete($backup_path, true);
-        }
-        return $desired_path;
+        // Heel belangrijk: retourneer de NIEUWE bronlocatie binnen $remote_source
+        return $new_source;
     }
 
-    // Move faalde -> herstel backup (rollback)
-    if ($wp_filesystem->is_dir($backup_path)) {
-        $wp_filesystem->move($backup_path, $desired_path, true);
-    }
-
-    // Fallback: ga verder met originele bron
+    // Fallback: doe niets als verplaatsen faalt
     return $source;
 
 }, 20, 4);
-
