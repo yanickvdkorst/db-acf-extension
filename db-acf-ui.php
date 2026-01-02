@@ -112,14 +112,6 @@ add_filter('pre_set_site_transient_update_plugins', function($transient) {
 
     $remote_version = ltrim($latest_tag, 'v');
 
-    // Admin notice voor debug
-    add_action('admin_notices', function() use ($latest_tag, $remote_version) {
-        echo '<div class="notice notice-info">';
-        echo '<p>[DB ACF] Huidige plugin versie: ' . DB_ACF_UI_VERSION . '</p>';
-        echo '<p>[DB ACF] Laatste Bitbucket tag: ' . $latest_tag . ' (' . $remote_version . ')</p>';
-        echo '</div>';
-    });
-
     // Als remote hoger is, bied update aan
     if (version_compare($remote_version, DB_ACF_UI_VERSION, '>')) {
         $transient->response[$plugin_slug] = (object)[
