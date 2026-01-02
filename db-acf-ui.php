@@ -68,12 +68,11 @@ add_action( 'plugins_loaded', function () {
 
 /**
  * ---------------------------
- * GitHub updater
+ * Bitbucket updater
  * ---------------------------
  */
 
-// Inject update info
-add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
+add_filter( 'pre_set_site_transient_update_plugins', function( $transient ) {
 
     if ( empty( $transient->checked ) ) {
         return $transient;
@@ -81,13 +80,13 @@ add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
 
     $plugin_slug = plugin_basename( DB_ACF_UI_FILE );
 
-    $response = wp_remote_get(
-        'https://api.github.com/repos/' . DB_ACF_UI_GITHUB_REPO . '/releases/latest',
-        [
-            'headers' => [ 'User-Agent' => 'WordPress' ],
-            'timeout' => 20,
-        ]
-    );
+    // Bitbucket API endpoint voor tags
+    $url = 'https://api.bitbucket.org/2.0/repositories/digitale-bazen/db-acf-extension/refs/tags?sort=-name&pagelen=1';
+
+    $response = wp_remote_get( $url, [
+        'headers' => [ 'User-Agent' => 'WordPress' ],
+        'timeout' => 20,
+    ] );
 
     if ( is_wp_error( $response ) ) {
         return $transient;
@@ -95,11 +94,11 @@ add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
 
     $data = json_decode( wp_remote_retrieve_body( $response ) );
 
-    if ( empty( $data->tag_name ) ) {
+    if ( empty( $data->values[0]->name ) ) {
         return $transient;
     }
 
-    $remote_version = ltrim( $data->tag_name, 'v' );
+    $remote_version = ltrim( $data->values[0]->name, 'v' );
 
     if ( version_compare( $remote_version, DB_ACF_UI_VERSION, '>' ) ) {
 
@@ -107,11 +106,10 @@ add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
             'slug'        => DB_ACF_UI_SLUG,
             'plugin'      => $plugin_slug,
             'new_version' => $remote_version,
-            'url'         => $data->html_url,
+            'url'         => 'https://bitbucket.org/digitale-bazen/db-acf-extension',
             'package'     => sprintf(
-                'https://github.com/%s/archive/refs/tags/%s.zip',
-                DB_ACF_UI_GITHUB_REPO,
-                $data->tag_name
+                'https://bitbucket.org/digitale-bazen/db-acf-extension/get/%s.zip',
+                $data->values[0]->name
             ),
         ];
     }
@@ -120,19 +118,17 @@ add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
 } );
 
 // Plugin info popup
-add_filter( 'plugins_api', function ( $res, $action, $args ) {
+add_filter( 'plugins_api', function( $res, $action, $args ) {
 
     if ( $action !== 'plugin_information' || $args->slug !== DB_ACF_UI_SLUG ) {
         return $res;
     }
 
-    $response = wp_remote_get(
-        'https://api.github.com/repos/' . DB_ACF_UI_GITHUB_REPO . '/releases/latest',
-        [
-            'headers' => [ 'User-Agent' => 'WordPress' ],
-            'timeout' => 20,
-        ]
-    );
+    $url = 'https://api.bitbucket.org/2.0/repositories/digitale-bazen/db-acf-extension/refs/tags?sort=-name&pagelen=1';
+    $response = wp_remote_get( $url, [
+        'headers' => [ 'User-Agent' => 'WordPress' ],
+        'timeout' => 20,
+    ] );
 
     if ( is_wp_error( $response ) ) {
         return $res;
@@ -140,20 +136,22 @@ add_filter( 'plugins_api', function ( $res, $action, $args ) {
 
     $data = json_decode( wp_remote_retrieve_body( $response ) );
 
+    $latest_tag = $data->values[0]->name ?? DB_ACF_UI_VERSION;
+
     return (object) [
         'name'          => 'DB ACF Extension',
         'slug'          => DB_ACF_UI_SLUG,
-        'version'       => ltrim( $data->tag_name, 'v' ),
+        'version'       => ltrim( $latest_tag, 'v' ),
         'author'        => 'Digitale Bazen',
-        'homepage'      => $data->html_url,
+        'homepage'      => 'https://bitbucket.org/digitale-bazen/db-acf-extension',
         'download_link' => sprintf(
-            'https://github.com/%s/archive/refs/tags/%s.zip',
-            DB_ACF_UI_GITHUB_REPO,
-            $data->tag_name
+            'https://bitbucket.org/digitale-bazen/db-acf-extension/get/%s.zip',
+            $latest_tag
         ),
         'sections'      => [
             'description' => 'Aangepaste ACF interface voor Digitale Bazen.',
-            'changelog'   => $data->body ?: 'Geen changelog opgegeven.',
+            'changelog'   => '', // kun je hier zelf vullen als je changelog in een file bijhoudt
         ],
     ];
+
 }, 20, 3 );
