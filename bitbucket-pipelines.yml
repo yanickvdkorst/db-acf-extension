@@ -3,14 +3,20 @@ image: atlassian/default-image:3
 
 pipelines:
   tags:
-    "v*":                       # draait voor bv. v1.2.8
+    "v*":   # bv. v1.2.9
       - step:
           name: "Build WP-ready ZIP"
           script:
-            - git fetch --tags
+            - set -e
             - echo "BITBUCKET_TAG=${BITBUCKET_TAG}"
-            # Bouw ZIP met vaste topmap 'db-acf-extension/'
-            - git archive --format=zip --output "db-acf-extension-${BITBUCKET_TAG}.zip" --prefix=db-acf-extension/ "${BITBUCKET_TAG}"
+            - echo "BITBUCKET_COMMIT=${BITBUCKET_COMMIT}"
+            - pwd
+            - ls -la
+            # Bouw ZIP met vaste topmap 'db-acf-extension/' vanaf de commit van de tag
+            - git archive --format=zip \
+                --output "db-acf-extension-${BITBUCKET_TAG}.zip" \
+                --prefix=db-acf-extension/ \
+                "${BITBUCKET_COMMIT}"
             - ls -lh "db-acf-extension-${BITBUCKET_TAG}.zip"
           artifacts:
             - "db-acf-extension-${BITBUCKET_TAG}.zip"
@@ -18,6 +24,7 @@ pipelines:
       - step:
           name: "Upload ZIP naar Bitbucket Downloads"
           script:
+            - ls -lh   # sanity check: artifact is gedownload in de workdir
             - pipe: atlassian/bitbucket-upload-file:0.7.5
               variables:
                 ATLASSIAN_ACCOUNT_EMAIL: $ATLASSIAN_ACCOUNT_EMAIL
