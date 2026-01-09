@@ -1,0 +1,36 @@
+name: Build Release ZIP
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-zip:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Check repo uit
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Pak versie uit release tag
+      - name: Set version
+        run: echo "RELEASE_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+      # 3. Maak tijdelijke map met juiste plugin slug
+      - name: Copy to temp folder
+        run: |
+          mkdir db-acf-extension
+          rsync -av --exclude='.git*' ./ db-acf-extension/
+
+      # 4. Maak zip van die map
+      - name: Create ZIP
+        run: |
+          zip -r db-acf-extension-${RELEASE_TAG}.zip db-acf-extension
+
+      # 5. Upload ZIP als release asset
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: db-acf-extension-${RELEASE_TAG}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
