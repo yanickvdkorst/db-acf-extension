@@ -2,7 +2,7 @@
 /*
 Plugin Name: DB ACF Extension
 Description: Aangepaste ACF interface voor Digitale Bazen
-Version: 1.3.6
+Version: 1.3.7
 Author: Digitale Bazen
 Text Domain: db-acf-ui
 Update URI: bitbucket.org/digitale-bazen/db-acf-extension
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------
  */
-define( 'DB_ACF_UI_VERSION', '1.3.6' );
+define( 'DB_ACF_UI_VERSION', '1.3.7' );
 define( 'DB_ACF_UI_MIN_PHP_VERSION', '8.0' );
 
 define( 'DB_ACF_UI_FILE', __FILE__ );
@@ -67,6 +67,7 @@ add_action( 'plugins_loaded', function () {
     \DB_ACF_UI\Main::get_instance();
 } );
 
+
 /**
  * ---------------------------
  * GitHub updater
@@ -110,7 +111,7 @@ add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
             'new_version' => $remote_version,
             'url'         => $data->html_url,
             'package'     => sprintf(
-                'https://github.com/%s/releases/download/%s/db-acf-extension.zip',
+                'https://github.com/%s/archive/refs/tags/%s.zip',
                 DB_ACF_UI_GITHUB_REPO,
                 $data->tag_name
             ),
@@ -148,7 +149,7 @@ add_filter( 'plugins_api', function ( $res, $action, $args ) {
         'author'        => 'Digitale Bazen',
         'homepage'      => $data->html_url,
         'download_link' => sprintf(
-            'https://github.com/%s/releases/download/%s/db-acf-extension.zip',
+            'https://github.com/%s/archive/refs/tags/%s.zip',
             DB_ACF_UI_GITHUB_REPO,
             $data->tag_name
         ),
