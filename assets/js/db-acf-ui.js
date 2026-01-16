@@ -85,6 +85,29 @@
       });
       $controls.prepend($edit);
 
+// --- Voeg knop toe om layout te toggle ---
+const $toggleBtn = $(
+    '<a href="#" class="acf-layout-toggle-btn acf-js-tooltip" title="Toggle layout" data-name="toggle-layout">' + 
+      '<span class="acf-icon -toggle-alt"></span>'
+    + '</a>'
+);
+$edit.after($toggleBtn);
+
+$toggleBtn.on('click', function(e){
+    e.preventDefault();
+    
+    const $btn = $(this);
+    const $icon = $btn.find('span');
+    const $layout = $btn.closest('.layout');
+    const fcField = acf.getInstance($layout.closest('.acf-field-flexible-content'));
+    if (!fcField) return;
+
+    // ACF toggle
+    fcField.onClickToggleLayout(null, $layout);
+
+    // icon class toggle
+    $icon.toggleClass('disabled');
+});
       // header click opent modal, behalve als pencil wordt geklikt
       $header.off('click.acfdb').on('click.acfdb', function(e) {
         if ($(e.target).closest('.acf-fc-layout-controls').length) return;
