@@ -5,22 +5,38 @@
     init() {
       ACFDB.removeSinglePreviewModal();
       ACFDB.addPreviewModalLinkMarkup();
+      ACFDB.translateDeletePopup();
 
-      
-      acf.addAction('load_field/type=flexible_content', function(field) {
-        field.$el.find('.acf-flexible-content:first > .values > .layout:not(.fc-modal)').each(function() {
-          ACFDB.addModal($(this));
-        });
+      acf.addAction("load_field/type=flexible_content", function (field) {
+        field.$el
+          .find(
+            ".acf-flexible-content:first > .values > .layout:not(.fc-modal)",
+          )
+          .each(function () {
+            ACFDB.addModal($(this));
+          });
       });
 
+      
 
       acf.addAction("after_duplicate", function ($clone, $el) {
         if ($el.is(".layout")) ACFDB.addModal($el);
       });
 
-      acf.addAction("append", function ($el) {
-        if ($el.is(".layout")) ACFDB.addModal($el);
-      });
+     acf.addAction("append", function ($el) {
+  if ($el.is(".layout")) {
+    ACFDB.addModal($el);
+
+    const cachedEl = $el[0];
+    setTimeout(() => {
+      const $fresh = $(cachedEl);
+      const $header = $fresh.find("> .acf-fc-layout-actions-wrap");
+      if ($header.length) {
+        ACFDB.open.call($header[0]);
+      }
+    }, 200);
+  }
+});
 
       acf.addAction("invalid_field", function (field) {
         ACFDB.invalidField(field.$el);
@@ -36,6 +52,30 @@
         }
       });
     },
+
+ translateDeletePopup() {
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        const $popup = $(node).find('.acf-confirm-popup').addBack('.acf-confirm-popup');
+        if (!$popup.length) return;
+
+        $popup.find('[data-event="confirm"]').text('Verwijderen');
+        $popup.find('.acf-close-popup').text('Annuleren');
+
+        const $p = $popup.find('.inner p');
+        const match = $p.text().match(/Are you sure you want to delete (.+?)\?/);
+        const blockName = match ? match[1] : '';
+        $p.text(`Weet je zeker dat je ${blockName} wilt verwijderen?`);
+
+        const $title = $popup.find('.title h3');
+        $title.text($title.text().replace('Delete', 'Verwijderen'));
+      });
+    });
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+},
 
     removeSinglePreviewModal() {
       const flexibleContentField = acf.getField("acf-field-flexible-content");
@@ -71,7 +111,7 @@
       let $controls = $header.find("> .acf-fc-layout-controls");
       if (!$controls.length) {
         $controls = $('<div class="acf-fc-layout-controls"></div>').appendTo(
-          $header
+          $header,
         );
       }
 
@@ -80,9 +120,9 @@
 
       // add pencil-alt
       const $edit = $(
-        '<a class="acf-js-tooltip" href="#" data-event="edit-layout" title="Bewerk layout">' +
+        '<a class="acf-js-tooltip" href="#" data-event="edit-layout" title="Bewerken">' +
           '<span class="acf-icon -pencil-alt"></span>' +
-          "</a>"
+          "</a>",
       );
       $edit.on("click.acfdb", function (e) {
         e.preventDefault();
@@ -96,9 +136,9 @@
 
       // --- Voeg knop toe om layout te toggle ---
       const $toggleBtn = $(
-        '<a href="#" class="acf-layout-toggle-btn acf-js-tooltip" title="Toggle layout" data-name="toggle-layout">' +
+        '<a href="#" class="acf-layout-toggle-btn acf-js-tooltip" title="In of uitschakelen" data-name="toggle-layout">' +
           '<span class="acf-icon -toggle-alt"></span>' +
-          "</a>"
+          "</a>",
       );
       $edit.after($toggleBtn);
 
@@ -109,7 +149,7 @@
         const $icon = $btn.find("span");
         const $layout = $btn.closest(".layout");
         const fcField = acf.getInstance(
-          $layout.closest(".acf-field-flexible-content")
+          $layout.closest(".acf-field-flexible-content"),
         );
         if (!fcField) return;
 
@@ -149,7 +189,7 @@
 
       const closeBtn = $('<a class="dashicons dashicons-no -cancel" />').on(
         "click",
-        ACFDB.close
+        ACFDB.close,
       );
       $layout.find("> .acf-fc-modal-title").html(caption).append(closeBtn);
 

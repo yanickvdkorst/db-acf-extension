@@ -307,6 +307,11 @@ body.acf-modal-open {
     mask-size: 1.3rem;
 }
 
+.acf-icon.-pencil.-clear::before {
+  display: inline-block !important;
+}
+
+
 .acf-icon.-toggle-alt {
     -webkit-mask-image: url("../images/icon-hidden-alt.svg");
     mask-image: url("../images/icon-hidden-alt.svg");
@@ -334,3 +339,8 @@ body.acf-modal-open {
 
 .layout.active-layout>.acf-fc-layout-actions-wrap .acf-icon.-pencil-alt{background: white;}
 .layout.active-layout>.acf-fc-layout-actions-wrap .acf-icon.-toggle-alt{background: white;}
+
+
+.acf-fc-expand-all  {display: none;}
+.acf-fc-collapse-all  {display: none;}
+.acf-flexible-content .acf-fc-top-actions .acf-separator        {display: none !important;}
