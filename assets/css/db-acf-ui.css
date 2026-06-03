@@ -14,8 +14,8 @@
   top: 50px !important;
   right: 0 !important;
   left: 0 !important;
-  width: 90vw;
-  max-width: 960px;
+  width: 75vw;
+  max-width: 75vw;
   max-height: calc(100vh - 100px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);
   margin: auto;
