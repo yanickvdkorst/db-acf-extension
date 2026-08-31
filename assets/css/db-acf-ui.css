@@ -336,6 +336,11 @@ body.acf-modal-open {
 .acf-icon.-pencil::before {display: none;}
 .acf-icon.-toggle::before {display: none;}
 
+/* De regel hierboven verbergt het potlood-icoon globaal (bedoeld voor de
+   flexible-content layout). Herstel het op de "bewerken"-knop van
+   afbeeldings-/bestandsvelden — die heeft data-name="edit". */
+.acf-icon.-pencil[data-name="edit"]::before {display: inline-block !important;}
+
 
 .layout.active-layout>.acf-fc-layout-actions-wrap .acf-icon.-pencil-alt{background: white;}
 .layout.active-layout>.acf-fc-layout-actions-wrap .acf-icon.-toggle-alt{background: white;}
