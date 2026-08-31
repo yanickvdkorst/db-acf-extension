@@ -27,6 +27,9 @@ class Main {
 
         // Output layout images in admin footer
         add_action( 'acf/input/admin_footer', [ $this, 'layouts_images_style' ], 20 );
+
+        // Vet-knop op tekstvelden (opt-in per veld)
+        ( new Bold_Toolbar() )->register();
     }
 
     public function register_assets() {
@@ -44,11 +47,29 @@ class Main {
             DB_ACF_UI_VERSION,
             true
         );
+
+        wp_register_style(
+            'db-acf-ui-bold',
+            DB_ACF_UI_URL . 'assets/css/db-acf-bold.css',
+            [],
+            DB_ACF_UI_VERSION
+        );
+
+        wp_register_script(
+            'db-acf-ui-bold-js',
+            DB_ACF_UI_URL . 'assets/js/db-acf-bold.js',
+            [ 'jquery' ],
+            DB_ACF_UI_VERSION,
+            true
+        );
     }
 
     public function enqueue_assets() {
         wp_enqueue_style( 'db-acf-ui-admin' );
         wp_enqueue_script( 'db-acf-ui-admin-js' );
+
+        wp_enqueue_style( 'db-acf-ui-bold' );
+        wp_enqueue_script( 'db-acf-ui-bold-js' );
     }
 
     public function layouts_images_style() {

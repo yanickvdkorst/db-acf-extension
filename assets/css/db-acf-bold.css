@@ -1,0 +1,131 @@
+/* Created by Digitale Bazen — vetgedrukt op tekstvelden */
+
+/* Het echte tekstveld blijft bestaan (ACF leest en verstuurt het), maar is
+   onzichtbaar. Niet display:none, zodat ACF het bij een validatiefout nog
+   kan focussen. */
+.acf-field input[type="text"].db-acf-bold-source {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Het bewerkbare element neemt de plek van het tekstveld in en moet er
+   identiek uitzien. */
+.db-acf-bold-editor {
+  display: block;
+  /* WordPress zet border-box op input-elementen, maar niet op een div. Zonder
+     dit komt padding + rand bovenop de 100% en steekt het veld buiten de
+     modal uit. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #8c8f94;
+  border-radius: 4px;
+  background: #fff;
+  color: #2c3338;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+}
+
+.db-acf-bold-editor:focus {
+  border-color: #2271b1;
+  box-shadow: 0 0 0 1px #2271b1;
+  outline: 2px solid transparent;
+}
+
+.db-acf-bold-editor[contenteditable="false"] {
+  background: #f0f0f1;
+  color: #646970;
+  cursor: default;
+}
+
+.db-acf-bold-editor strong,
+.db-acf-bold-editor b {
+  font-weight: 700;
+}
+
+/* contenteditable kent geen placeholder-attribuut. */
+.db-acf-bold-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #8c8f94;
+  pointer-events: none;
+}
+
+/* Bij een ACF-validatiefout krijgt de wrapper .acf-error; laat dat ook op de
+   editor zien, want het echte veld is onzichtbaar. */
+.acf-field.acf-error .db-acf-bold-editor {
+  border-color: #d63638;
+}
+
+.db-acf-bold-toolbar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.db-acf-bold-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #c3c4c7;
+  border-radius: 3px;
+  background: #fff;
+  color: #2c3338;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.db-acf-bold-btn:hover:not(:disabled) {
+  background: #f0f0f1;
+  border-color: #8c8f94;
+}
+
+.db-acf-bold-btn:focus-visible {
+  outline: 2px solid #2271b1;
+  outline-offset: 1px;
+}
+
+.db-acf-bold-btn.is-active {
+  background: #2271b1;
+  border-color: #2271b1;
+  color: #fff;
+}
+
+.db-acf-bold-btn.is-active:hover {
+  background: #135e96;
+  border-color: #135e96;
+}
+
+.db-acf-bold-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .db-acf-bold-btn {
+    transition: none;
+  }
+}
