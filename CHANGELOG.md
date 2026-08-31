@@ -1,5 +1,23 @@
 # Changelog ##
 
+## 1.7.2 - 31 Aug 2026
+* **Fix: je hoefde de plugin twee keer te updaten.** De updater vergeleek de
+  release met het versienummer uit het geheugen. Tijdens een update is dat nog
+  de óude versie, waardoor er direct na het installeren opnieuw een
+  "update beschikbaar" werd weggeschreven — en die bleef een uur staan.
+  Er wordt nu vergeleken met de versie op schijf, die WordPress zelf al
+  klaarzet. Een verouderde melding van een eerdere versie wordt actief
+  opgeruimd.
+* De GitHub-aanroep wordt zes uur gecachet. Voorheen belde de plugin bij elke
+  update-check én elk detailvenster; ongeauthenticeerd staat GitHub 60
+  verzoeken per uur toe, en daarboven verdween de update-melding zomaar.
+* Er wordt alleen nog een update aangeboden als de release ook echt een
+  `db-acf-extension.zip` bevat, zodat een vergeten bijlage geen mislukte
+  installatie meer oplevert.
+* `Update URI` in de plugin-header wees naar Bitbucket terwijl de updater
+  GitHub gebruikt; die staat nu goed.
+* De updater is verhuisd van het hoofdbestand naar `classes/updater.php`.
+
 ## 1.7.1 - 31 Aug 2026
 * Fix: het vet-veld stak buiten de modal doordat padding en rand bovenop de
   breedte kwamen (`box-sizing` ontbrak).
