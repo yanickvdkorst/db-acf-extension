@@ -1,5 +1,17 @@
 # Changelog ##
 
+## 1.7.3 - 11 Sep 2026
+* **Fix: titelveld met vetgedrukt soms niet bewerkbaar.** De vet-knop werd ook
+  aan het verborgen sjabloon van flexible content gehangen. Bij "Layout
+  toevoegen" kloont ACF dat sjabloon, en de nieuwe layout kreeg een dode kopie
+  van de editor mee. Afhankelijk van welk script eerst laadde was die niet te
+  bewerken, óf je kon wel typen maar werd de titel niet opgeslagen. Het
+  sjabloon wordt nu overgeslagen en elke nieuwe layout krijgt een eigen editor.
+* Ook bij **Dupliceer layout** kreeg de kopie zo'n dode editor; getypte tekst
+  kwam niet in het veld. Die restanten worden nu opgeruimd en opnieuw opgebouwd.
+* De editor volgt voortaan live of ACF het veld aan- of uitzet. Een titel die
+  via conditionele logica pas later zichtbaar wordt, bleef eerder op slot.
+
 ## 1.7.2 - 31 Aug 2026
 * **Fix: je hoefde de plugin twee keer te updaten.** De updater vergeleek de
   release met het versienummer uit het geheugen. Tijdens een update is dat nog

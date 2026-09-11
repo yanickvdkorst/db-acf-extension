@@ -16,7 +16,13 @@
   "use strict";
 
   const WRAPPER = ".db-acf-has-bold";
-  const FLAG = "dbAcfBold";
+
+  /**
+   * Inputs waar al een editor aan hangt. Bewust geen data-attribuut: ACF kloont
+   * layouts met jQuery, en een attribuut reist mee naar de kloon terwijl de
+   * event-handlers dat niet doen. Dan werd de kloon ten onrechte overgeslagen.
+   */
+  const attached = new WeakSet();
 
   /** Tags die als opmaak bewaard blijven; de rest wordt platte tekst. */
   const KEEP = { STRONG: true, B: true };
@@ -123,15 +129,21 @@
     const $input = $field.find("> .acf-input input[type='text']").first();
     if (!$input.length) return;
 
-    const input = $input[0];
-    if (input.dataset[FLAG]) return;
-    input.dataset[FLAG] = "1";
+    // Het verborgen sjabloon van flexible content en repeaters overslaan. ACF
+    // kloont dat bij "Layout toevoegen"; zat er al een editor in, dan kreeg de
+    // nieuwe layout een dode kopie die niet (of niet opgeslagen) bewerkbaar was.
+    if ($field.closest(".acf-clone, .acf-flexible-content > .clones").length) return;
 
-    const editable = !input.readOnly && !input.disabled;
+    const input = $input[0];
+    if (attached.has(input)) return;
+    attached.add(input);
+
+    // Bij "Dupliceer layout" komen toolbar en editor van het origineel als losse
+    // HTML mee. Weg ermee; hieronder worden ze opnieuw opgebouwd.
+    $input.siblings(".db-acf-bold-toolbar, .db-acf-bold-editor").remove();
 
     const editor = document.createElement("div");
     editor.className = "db-acf-bold-editor";
-    editor.setAttribute("contenteditable", editable ? "true" : "false");
     editor.setAttribute("role", "textbox");
     editor.setAttribute("aria-multiline", "false");
     editor.innerHTML = valueToHtml(input.value);
@@ -150,12 +162,27 @@
         '<span class="screen-reader-text">Vet maken</span></button>'
     );
 
-    if (!editable) {
-      $button.prop("disabled", true);
-    }
-
     $toolbar.append($button).insertBefore($input);
     $input.after(editor).addClass("db-acf-bold-source");
+
+    // ACF zet het veld na het laden nog aan en uit: een nieuwe layout komt
+    // disabled uit het sjabloon en wordt daarna vrijgegeven, en conditionele
+    // logica schakelt verborgen velden uit. Editor en knop volgen die stand.
+    function isEditable() {
+      return !input.readOnly && !input.disabled;
+    }
+
+    function updateEditable() {
+      const editable = isEditable();
+      editor.setAttribute("contenteditable", editable ? "true" : "false");
+      $button.prop("disabled", !editable);
+    }
+
+    updateEditable();
+    new MutationObserver(updateEditable).observe(input, {
+      attributes: true,
+      attributeFilter: ["disabled", "readonly"],
+    });
 
     function updateState() {
       const active = document.activeElement === editor && isBoldNow();
@@ -169,7 +196,7 @@
 
     $button.on("click", function (e) {
       e.preventDefault();
-      if (!editable) return;
+      if (!isEditable()) return;
       applyBold(editor);
       sync(editor, input);
       updateState();
@@ -247,8 +274,8 @@
       attachWithin($el);
     });
 
-    acf.addAction("after_duplicate", function ($clone, $el) {
-      attachWithin($el);
+    acf.addAction("after_duplicate", function ($el, $clone) {
+      attachWithin($clone);
     });
 
     attachWithin($(document.body));
