@@ -2,7 +2,7 @@
 /*
 Plugin Name: DB ACF Extension
 Description: Aangepaste ACF interface voor Digitale Bazen
-Version: 1.7.3
+Version: 1.7.4
 Author: Digitale Bazen
 Text Domain: db-acf-ui
 Update URI: https://github.com/yanickvdkorst/DB-ACF-Extension
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------
  */
-define( 'DB_ACF_UI_VERSION', '1.7.3' );
+define( 'DB_ACF_UI_VERSION', '1.7.4' );
 define( 'DB_ACF_UI_MIN_PHP_VERSION', '8.0' );
 
 define( 'DB_ACF_UI_FILE', __FILE__ );

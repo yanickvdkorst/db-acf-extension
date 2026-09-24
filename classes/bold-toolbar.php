@@ -20,14 +20,27 @@ namespace DB_ACF_UI;
  *     add_filter( 'db_acf_ui/allow_bold', function ( $enabled, $field ) {
  *         return $enabled || str_ends_with( $field['name'] ?? '', 'titel' );
  *     }, 10, 2 );
+ *
+ * Regelovergangen zijn een tweede, losse schakelaar ("Regelovergang toestaan",
+ * filter `db_acf_ui/allow_br`): in een titel wil je die soms wel, in een
+ * knoptekst of een naam juist niet. Staat hij uit, dan doet Enter niets. Een
+ * <br> die al in de waarde staat blijft hoe dan ook staan — die weggooien zou
+ * bestaande pagina's veranderen.
  */
 class Bold_Toolbar {
 
     /** Naam van de veldinstelling; komt zo ook in de field group JSON te staan. */
     public const SETTING = 'db_allow_bold';
 
+    /** Idem, voor regelovergangen. Los aan te zetten, want lang niet elke titel
+     *  mag over meerdere regels lopen. */
+    public const SETTING_BR = 'db_allow_br';
+
     /** Class op de veld-wrapper waar de JS op zoekt. */
     public const WRAPPER_CLASS = 'db-acf-has-bold';
+
+    /** Idem; staat alleen op velden waar Enter een <br> mag maken. */
+    public const WRAPPER_CLASS_BR = 'db-acf-allows-br';
 
     /**
      * Veldtypes met één enkele tekstinput. `textarea` bewust niet: daar levert
@@ -58,6 +71,22 @@ class Bold_Toolbar {
             'ui'            => 1,
             'default_value' => 0,
         ] );
+
+        // Alleen zinvol bij een veld met de vet-knop: zonder die knop is er geen
+        // editor waarin Enter iets kan doen. Vandaar de conditie.
+        acf_render_field_setting( $field, [
+            'label'         => __( 'Regelovergang toestaan', 'db-acf-ui' ),
+            'instructions'  => __( 'Met Enter maak je een nieuwe regel (&lt;br&gt;) in dit veld.', 'db-acf-ui' ),
+            'name'          => self::SETTING_BR,
+            'type'          => 'true_false',
+            'ui'            => 1,
+            'default_value' => 0,
+            'conditions'    => [
+                'field'    => self::SETTING,
+                'operator' => '==',
+                'value'    => 1,
+            ],
+        ] );
     }
 
     /**
@@ -83,8 +112,13 @@ class Bold_Toolbar {
             return $field;
         }
 
-        $existing = $field['wrapper']['class'] ?? '';
-        $field['wrapper']['class'] = trim( $existing . ' ' . self::WRAPPER_CLASS );
+        $classes = [ $field['wrapper']['class'] ?? '', self::WRAPPER_CLASS ];
+
+        if ( $this->is_br_enabled_for( $field ) ) {
+            $classes[] = self::WRAPPER_CLASS_BR;
+        }
+
+        $field['wrapper']['class'] = trim( implode( ' ', array_filter( $classes ) ) );
 
         return $field;
     }
@@ -97,6 +131,15 @@ class Bold_Toolbar {
         $enabled = ! empty( $field[ self::SETTING ] );
 
         return (bool) apply_filters( 'db_acf_ui/allow_bold', $enabled, $field );
+    }
+
+    /**
+     * Mag Enter in dit veld een regelovergang maken?
+     */
+    private function is_br_enabled_for( array $field ): bool {
+        $enabled = ! empty( $field[ self::SETTING_BR ] );
+
+        return (bool) apply_filters( 'db_acf_ui/allow_br', $enabled, $field );
     }
 
     /**

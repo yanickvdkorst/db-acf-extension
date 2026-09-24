@@ -1,5 +1,20 @@
 # Changelog ##
 
+## 1.7.4 - 24 Sep 2026
+* **Nieuw: "Regelovergang toestaan".** Een tweede schakelaar in de
+  veldinstellingen, naast "Vetgedrukt toestaan" en alleen zichtbaar als die aan
+  staat. Staat hij aan, dan maakt **Enter** een regelovergang (`<br>`) in het
+  veld. In een titel wil je dat soms wel, in een knoptekst of een naam niet —
+  vandaar apart. Site-breed aan te zetten met de filter `db_acf_ui/allow_br`.
+* **Fix: een `<br>` in de titel werd letterlijke tekst.** Zette je "Vetgedrukt
+  toestaan" aan op een veld waarin je `<br>` gebruikt, dan schreef de editor bij
+  de eerste bewerking `&lt;br&gt;` weg en toonde de voorkant de tag letterlijk.
+  Een `<br>` die al in de waarde staat blijft nu gewoon een regelovergang, ook
+  als regelovergangen voor dat veld uit staan — hem alsnog weggooien zou
+  bestaande pagina's veranderen. Een waarde die eerder is platgeslagen wordt
+  rechtgezet zodra je het veld bewerkt, mits het vinkje aan staat.
+* Een losse regelovergang aan het eind van een veld wordt niet opgeslagen.
+
 ## 1.7.3 - 11 Sep 2026
 * **Fix: titelveld met vetgedrukt soms niet bewerkbaar.** De vet-knop werd ook
   aan het verborgen sjabloon van flexible content gehangen. Bij "Layout

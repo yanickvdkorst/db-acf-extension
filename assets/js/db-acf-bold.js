@@ -17,6 +17,9 @@
 
   const WRAPPER = ".db-acf-has-bold";
 
+  /** Velden waar Enter een regelovergang mag maken (aparte veldinstelling). */
+  const WRAPPER_BR = "db-acf-allows-br";
+
   /**
    * Inputs waar al een editor aan hangt. Bewust geen data-attribuut: ACF kloont
    * layouts met jQuery, en een attribuut reist mee naar de kloon terwijl de
@@ -43,36 +46,62 @@
    * worden onschadelijk gemaakt, waarna de toegestane tags weer echte tags
    * worden. Een <script> in de waarde blijft dus leesbare tekst.
    *
+   * Een echte <br> uit de veldwaarde wordt altijd een regelovergang, ook in een
+   * veld dat ze niet (meer) mag maken: hem alsnog escapen zou bestaande
+   * pagina's veranderen. Staat er een letterlijke &lt;br&gt; in — zo schreef
+   * versie 1.7.3 en ouder een regelovergang weg — dan zetten we die alleen
+   * recht waar regelovergangen zijn toegestaan.
+   *
    * Zou & hier óók ge-escaped worden, dan groeit een waarde met een & bij elke
    * opslag aan: & → &amp; → &amp;amp;.
    */
-  function valueToHtml(value) {
-    return String(value)
+  function valueToHtml(value, allowBr) {
+    // Markering, zodat een echte <br> uit de waarde straks niet te verwarren is
+    // met de letterlijke tekst "&lt;br&gt;" zodra alles ge-escaped is.
+    const MARK = "\u0000br\u0000";
+
+    let out = String(value)
+      .replace(/<br\s*\/?>/gi, MARK)
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/&lt;(\/?)(?:strong|b)&gt;/gi, "<$1strong>");
+
+    if (allowBr !== false) {
+      out = out.replace(/&lt;br\s*\/?&gt;/gi, MARK);
+    }
+
+    return out.split(MARK).join("<br>");
   }
 
   /**
    * Editor-inhoud → veldwaarde. Loopt de DOM langs en houdt alleen tekst en
    * <strong> over.
    */
-  function nodeToValue(node) {
+  function nodeToValue(node, allowBr) {
     let out = "";
 
     Array.prototype.forEach.call(node.childNodes, function (child) {
       if (child.nodeType === 3) {
-        out += escapeHtml(child.nodeValue);
+        // Een regelovergang komt er niet altijd als <br> in: in dit veld (met
+        // white-space: pre-wrap) zet Chrome een echte newline neer. Een <input>
+        // kan die niet bevatten — die zou bij het opslaan sneuvelen — dus maken
+        // we er een <br> van. Mag het veld geen regelovergangen, dan wordt het
+        // een spatie, net als bij plakken.
+        out += escapeHtml(child.nodeValue).replace(
+          /\r\n|[\r\n]/g,
+          allowBr === false ? " " : "<br>"
+        );
         return;
       }
       if (child.nodeType !== 1) {
         return;
       }
       if (child.tagName === "BR") {
-        return; // eenregelig veld
+        out += "<br>";
+        return;
       }
 
-      const inner = nodeToValue(child);
+      const inner = nodeToValue(child, allowBr);
 
       if (KEEP[child.tagName] && inner !== "") {
         out += "<strong>" + inner + "</strong>";
@@ -89,21 +118,35 @@
       .replace(/<\/strong><strong>/g, "") // contenteditable knipt stukken op
       .replace(/<strong>\s*<\/strong>/g, "") // lege tags
       .replace(/\u00a0/g, " ") // harde spaties uit contenteditable
-      .replace(/\s+$/, "");
+      .replace(/(?:\s|<br>)+$/, ""); // vulling die contenteditable achterlaat
   }
 
-  function toValue(editor) {
-    return cleanValue(nodeToValue(editor));
+  function toValue(editor, allowBr) {
+    return cleanValue(nodeToValue(editor, allowBr));
   }
 
   /** Schrijf de editor-inhoud terug naar het echte veld en laat ACF het weten. */
-  function sync(editor, input) {
-    const next = toValue(editor);
+  function sync(editor, input, allowBr) {
+    const next = toValue(editor, allowBr);
     if (input.value === next) return;
 
     input.value = next;
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  /**
+   * Enter moet een <br> opleveren. Laat je contenteditable zijn gang gaan, dan
+   * maakt die er een <div> of <p> van; die overleeft het opslaan niet, want
+   * alleen tekst, <strong> en <br> komen in de veldwaarde terecht.
+   */
+  function insertLineBreak() {
+    try {
+      if (document.execCommand("insertLineBreak")) return;
+    } catch (e) {
+      // Niet elke browser kent dit commando.
+    }
+    document.execCommand("insertHTML", false, "<br>");
   }
 
   function applyBold(editor) {
@@ -142,11 +185,14 @@
     // HTML mee. Weg ermee; hieronder worden ze opnieuw opgebouwd.
     $input.siblings(".db-acf-bold-toolbar, .db-acf-bold-editor").remove();
 
+    // Tweede veldinstelling: mag Enter hier een regelovergang maken?
+    const allowBr = $field.hasClass(WRAPPER_BR);
+
     const editor = document.createElement("div");
     editor.className = "db-acf-bold-editor";
     editor.setAttribute("role", "textbox");
-    editor.setAttribute("aria-multiline", "false");
-    editor.innerHTML = valueToHtml(input.value);
+    editor.setAttribute("aria-multiline", allowBr ? "true" : "false");
+    editor.innerHTML = valueToHtml(input.value, allowBr);
 
     if (input.placeholder) {
       editor.dataset.placeholder = input.placeholder;
@@ -198,19 +244,22 @@
       e.preventDefault();
       if (!isEditable()) return;
       applyBold(editor);
-      sync(editor, input);
+      sync(editor, input, allowBr);
       updateState();
     });
 
     $(editor).on("keydown", function (e) {
       if (e.key === "Enter") {
-        e.preventDefault(); // eenregelig veld
+        e.preventDefault(); // nooit een nieuwe alinea in een tekstveld
+        if (!allowBr || !isEditable()) return;
+        insertLineBreak();
+        sync(editor, input, allowBr);
         return;
       }
       if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
         e.preventDefault();
         applyBold(editor);
-        sync(editor, input);
+        sync(editor, input, allowBr);
         updateState();
       }
     });
@@ -225,13 +274,13 @@
     });
 
     $(editor).on("input", function () {
-      sync(editor, input);
+      sync(editor, input, allowBr);
     });
 
     $(editor).on("blur", function () {
       // Normaliseer wat de browser ervan maakte (<b> wordt <strong>, lege tags weg).
-      sync(editor, input);
-      editor.innerHTML = valueToHtml(input.value);
+      sync(editor, input, allowBr);
+      editor.innerHTML = valueToHtml(input.value, allowBr);
       updateState();
     });
 
