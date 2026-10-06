@@ -2,7 +2,7 @@
 /*
 Plugin Name: DB ACF Extension
 Description: Aangepaste ACF interface voor Digitale Bazen
-Version: 1.7.4
+Version: 1.8.0
 Author: Digitale Bazen
 Text Domain: db-acf-ui
 Update URI: https://github.com/yanickvdkorst/DB-ACF-Extension
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------
  */
-define( 'DB_ACF_UI_VERSION', '1.7.4' );
+define( 'DB_ACF_UI_VERSION', '1.8.0' );
 define( 'DB_ACF_UI_MIN_PHP_VERSION', '8.0' );
 
 define( 'DB_ACF_UI_FILE', __FILE__ );
@@ -67,6 +67,26 @@ add_action( 'plugins_loaded', function () {
     \DB_ACF_UI\Main::get_instance();
 } );
 
+
+/**
+ * ---------------------------
+ * CF7 healthcheck
+ * ---------------------------
+ * Buiten de ACF-check gehouden: het testen van formulieren heeft niets met ACF
+ * te maken. Op after_setup_theme, want pas dan is de functions.php van het thema
+ * geladen en kunnen we zien of dáár de oude healthcheck nog staat. Zo ja, dan
+ * houdt de plugin zich stil en blijft die versie draaien — anders zouden er twee
+ * healthchecks naast elkaar lopen en krijg je dubbele mails.
+ */
+add_action( 'after_setup_theme', function () {
+    if ( function_exists( 'db_run_cf7_test' ) ) {
+        return; // het thema doet het nog; daar eerst weghalen
+    }
+
+    ( new \DB_ACF_UI\CF7_Healthcheck() )->register();
+}, 20 );
+
+register_deactivation_hook( __FILE__, [ '\DB_ACF_UI\CF7_Healthcheck', 'unschedule' ] );
 
 /**
  * ---------------------------

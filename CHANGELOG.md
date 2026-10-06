@@ -1,5 +1,26 @@
 # Changelog ##
 
+## 1.8.0 - 6 Oct 2026
+* **Nieuw: de dagelijkse CF7-healthcheck zit nu in de plugin.** Elke nacht om
+  06:00 (WP-tijdzone) wordt elk gepubliceerd Contact Form 7-formulier ingediend,
+  zodat je het merkt als er iets stuk is vóórdat een bezoeker het ontdekt. Eén
+  willekeurig formulier mag daarbij écht mailen; dat test meteen de
+  SMTP-instellingen zonder dat de inbox volloopt. De uitslag komt als
+  overzichtsmail binnen. Formulieren met een quiz, reCAPTCHA of een onbekend
+  file-type worden overgeslagen en in de mail benoemd als "handmatige check
+  nodig". Handmatig draaien kan nog steeds via `/?db_cf7_test=1` of
+  `/wp-admin/admin-post.php?action=db_cf7_test`.
+* Deze code stond in `functions-root.php` van het thema en draaide dus alleen op
+  sites met dat thema. **Staat de oude versie daar nog, dan houdt de plugin zich
+  stil** en blijft het thema de healthcheck doen — zo lopen er nooit twee naast
+  elkaar en krijg je geen dubbele mails. Haal je de code uit het thema, dan neemt
+  de plugin het bij de eerstvolgende pageload over, inclusief de al geplande taak.
+* Per site aan te passen met filters: `db_cf7_healthcheck/enabled` (helemaal uit),
+  `/recipient` (ontvanger), `/test_email` (het adres waaraan een testinzending te
+  herkennen is), `/notify_on_success` (op false: alleen mailen bij problemen) en
+  `/staging_hosts` (domeinen die nooit mailen, standaard `.ontwikkelbazen.nl`).
+* Bij het deactiveren van de plugin wordt de geplande taak opgeruimd.
+
 ## 1.7.4 - 24 Sep 2026
 * **Nieuw: "Regelovergang toestaan".** Een tweede schakelaar in de
   veldinstellingen, naast "Vetgedrukt toestaan" en alleen zichtbaar als die aan
