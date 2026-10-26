@@ -63,12 +63,28 @@ class CF7_Healthcheck {
 
     /**
      * Plant de dagelijkse run op de eerstvolgende 06:00 in de WP-tijdzone.
+     *
+     * Een dagelijkse WP-cron telt steeds 86400 seconden op. Na het ingaan van de
+     * zomer- of wintertijd klopt de lokale tijd dus een uur niet meer en draait
+     * de check om 05:00 of 07:00. Staat hij scheef, dan zetten we hem hier terug;
+     * dat gebeurt vanzelf bij de eerste pageload na de klokwissel.
      */
     public function maybe_schedule(): void {
-        if ( wp_next_scheduled( self::CRON_HOOK ) ) {
-            return;
+        $volgende = wp_next_scheduled( self::CRON_HOOK );
+
+        if ( $volgende ) {
+            if ( '06:00' === wp_date( 'H:i', $volgende ) ) {
+                return;
+            }
+
+            wp_unschedule_event( $volgende, self::CRON_HOOK );
         }
 
+        wp_schedule_event( $this->next_six_am(), 'daily', self::CRON_HOOK );
+    }
+
+    /** Eerstvolgende 06:00 in de tijdzone van de site. */
+    private function next_six_am(): int {
         $tz     = wp_timezone();
         $now    = new \DateTime( 'now', $tz );
         $target = new \DateTime( 'today 06:00', $tz );
@@ -76,7 +92,7 @@ class CF7_Healthcheck {
             $target->modify( '+1 day' );
         }
 
-        wp_schedule_event( $target->getTimestamp(), 'daily', self::CRON_HOOK );
+        return $target->getTimestamp();
     }
 
     /** Opruimen bij deactiveren van de plugin. */

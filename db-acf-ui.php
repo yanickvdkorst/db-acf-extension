@@ -2,7 +2,7 @@
 /*
 Plugin Name: DB ACF Extension
 Description: Aangepaste ACF interface voor Digitale Bazen
-Version: 1.8.0
+Version: 1.9.0
 Author: Digitale Bazen
 Text Domain: db-acf-ui
 Update URI: https://github.com/yanickvdkorst/DB-ACF-Extension
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------
  */
-define( 'DB_ACF_UI_VERSION', '1.8.0' );
+define( 'DB_ACF_UI_VERSION', '1.9.0' );
 define( 'DB_ACF_UI_MIN_PHP_VERSION', '8.0' );
 
 define( 'DB_ACF_UI_FILE', __FILE__ );
@@ -70,6 +70,15 @@ add_action( 'plugins_loaded', function () {
 
 /**
  * ---------------------------
+ * Instellingen
+ * ---------------------------
+ * Buiten de ACF-check gehouden: de pagina moet ook bereikbaar zijn als ACF
+ * (tijdelijk) niet actief is, al was het maar om onderdelen uit te zetten.
+ */
+( new \DB_ACF_UI\Settings() )->register();
+
+/**
+ * ---------------------------
  * CF7 healthcheck
  * ---------------------------
  * Buiten de ACF-check gehouden: het testen van formulieren heeft niets met ACF
@@ -79,6 +88,10 @@ add_action( 'plugins_loaded', function () {
  * healthchecks naast elkaar lopen en krijg je dubbele mails.
  */
 add_action( 'after_setup_theme', function () {
+    if ( ! \DB_ACF_UI\Settings::enabled( 'cf7_healthcheck' ) ) {
+        return; // uitgezet onder Instellingen → DB ACF Extensie
+    }
+
     if ( function_exists( 'db_run_cf7_test' ) ) {
         return; // het thema doet het nog; daar eerst weghalen
     }

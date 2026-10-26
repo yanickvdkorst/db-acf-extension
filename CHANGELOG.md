@@ -1,5 +1,25 @@
 # Changelog ##
 
+## 1.9.0 - 26 Oct 2026
+* **Nieuw: je kiest per site wat de plugin doet.** Onder **Instellingen → DB ACF
+  Extensie** staan drie schakelaars:
+  * *Aangepaste layout-interface* — layouts in een modal met potlood-knop,
+    zichtbaarheidsknop en sluiten met Esc, plus de grote kaarten met
+    voorbeeldafbeelding bij "Layout toevoegen". Uit = de standaardweergave van ACF.
+  * *Vetgedrukt op tekstvelden* — de B-knop op velden waar dat per veld aan staat.
+  * *Dagelijkse formulier-check* — de nachtelijke Contact Form 7-controle.
+* **Alles staat standaard aan**, dus een site die alleen de update binnenhaalt
+  merkt niets. Een onderdeel dat uit staat laadt ook niets meer: de bijbehorende
+  CSS en JavaScript blijven weg.
+* Zet je de formulier-check uit, dan wordt de geplande taak meteen opgeruimd.
+* **Fix: de formulier-check liep na de klokwissel een uur uit de pas.** Een
+  dagelijkse WP-cron telt 86400 seconden op, dus na het ingaan van de winter- of
+  zomertijd draaide hij om 05:00 of 07:00. Hij zet zichzelf nu terug op 06:00,
+  bij de eerste pageload na de wissel.
+* In code kan het ook, bijvoorbeeld vanuit een mu-plugin, met de filter
+  `db_acf_ui/module_enabled`. Dat wint van het vinkje; de instellingenpagina
+  meldt het als een onderdeel via code wordt gestuurd.
+
 ## 1.8.0 - 6 Oct 2026
 * **Nieuw: de dagelijkse CF7-healthcheck zit nu in de plugin.** Elke nacht om
   06:00 (WP-tijdzone) wordt elk gepubliceerd Contact Form 7-formulier ingediend,

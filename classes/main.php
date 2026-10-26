@@ -21,15 +21,20 @@ class Main {
     use Singleton;
 
     protected function init() {
-        // Admin assets
+        // Welke onderdelen aan staan, kiest de beheerder onder
+        // Instellingen → DB ACF Extensie. Standaard staat alles aan.
         add_action( 'acf/input/admin_enqueue_scripts', [ $this, 'register_assets' ], 1 );
         add_action( 'acf/input/admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 
-        // Output layout images in admin footer
-        add_action( 'acf/input/admin_footer', [ $this, 'layouts_images_style' ], 20 );
+        // Voorbeeldafbeeldingen op de kaarten in de "layout toevoegen"-popup
+        if ( Settings::enabled( 'layout_ui' ) ) {
+            add_action( 'acf/input/admin_footer', [ $this, 'layouts_images_style' ], 20 );
+        }
 
         // Vet-knop op tekstvelden (opt-in per veld)
-        ( new Bold_Toolbar() )->register();
+        if ( Settings::enabled( 'bold_toolbar' ) ) {
+            ( new Bold_Toolbar() )->register();
+        }
     }
 
     public function register_assets() {
@@ -65,11 +70,15 @@ class Main {
     }
 
     public function enqueue_assets() {
-        wp_enqueue_style( 'db-acf-ui-admin' );
-        wp_enqueue_script( 'db-acf-ui-admin-js' );
+        if ( Settings::enabled( 'layout_ui' ) ) {
+            wp_enqueue_style( 'db-acf-ui-admin' );
+            wp_enqueue_script( 'db-acf-ui-admin-js' );
+        }
 
-        wp_enqueue_style( 'db-acf-ui-bold' );
-        wp_enqueue_script( 'db-acf-ui-bold-js' );
+        if ( Settings::enabled( 'bold_toolbar' ) ) {
+            wp_enqueue_style( 'db-acf-ui-bold' );
+            wp_enqueue_script( 'db-acf-ui-bold-js' );
+        }
     }
 
     public function layouts_images_style() {
