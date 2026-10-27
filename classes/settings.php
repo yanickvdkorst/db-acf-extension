@@ -48,7 +48,7 @@ class Settings {
             ],
             'cf7_healthcheck' => [
                 'label' => __( 'Dagelijkse formulier-check', 'db-acf-ui' ),
-                'uitleg' => __( 'Dient elke nacht om 06:00 alle Contact Form 7-formulieren in en mailt de uitslag, zodat je kapotte formulieren merkt vóór een bezoeker. Eén formulier mailt echt, als test van de SMTP-instellingen.', 'db-acf-ui' ),
+                'uitleg' => __( 'Dient elke nacht om 06:00 alle Contact Form 7-formulieren in en mailt de uitslag, zodat je kapotte formulieren merkt vóór een bezoeker. De formulieren zelf versturen geen mail; je krijgt alleen het overzicht.', 'db-acf-ui' ),
             ],
         ];
     }

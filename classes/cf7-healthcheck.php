@@ -11,9 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * Elke nacht om 06:00 (WP-tijdzone) wordt elk formulier ingediend via het
  * REST-endpoint van CF7, zodat je het merkt als een formulier stuk is vóórdat
- * een bezoeker het ontdekt. Eén willekeurig formulier mag daarbij écht mailen;
- * dat test meteen de SMTP-instellingen zonder dat de inbox volloopt. De uitslag
- * gaat als overzichtsmail naar het adres uit `db_cf7_healthcheck/recipient`.
+ * een bezoeker het ontdekt. De formulieren mailen daarbij niet - je krijgt alleen
+ * de overzichtsmail, op het adres uit `db_cf7_healthcheck/recipient`.
  *
  * Deze code stond eerder in functions-root.php van het thema. In de plugin
  * draait hij op elke site die de plugin heeft, en is hij in één release bij te
@@ -27,6 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   db_cf7_healthcheck/test_email         — adres waaraan een testinzending te herkennen is
  *   db_cf7_healthcheck/notify_on_success  — op false: alleen mailen bij problemen
  *   db_cf7_healthcheck/staging_hosts      — domeinen die nooit mailen
+ *   db_cf7_healthcheck/smtp_test          — op true: één formulier mailt écht, als SMTP-test
  */
 class CF7_Healthcheck {
 
@@ -37,7 +37,7 @@ class CF7_Healthcheck {
     /** Lock tegen overlappende runs. */
     private const RUN_LOCK = 'db_cf7_running';
 
-    /** Het formulier dat deze run wél mag mailen. */
+    /** Het formulier dat deze run wél mag mailen (alleen bij de SMTP-test). */
     private const MAIL_FORM = 'db_cf7_mail_form_id';
 
     /** Geheim waaraan de inzendingen van deze run te herkennen zijn. */
@@ -48,6 +48,9 @@ class CF7_Healthcheck {
 
     /** Meldingen van de lopende run. */
     private array $log = [];
+
+    /** Dezelfde run, maar per formulier - de overzichtsmail bouwt hier zijn lijst mee. */
+    private array $results = [];
 
     /** De meldingen van de laatste run, voor wie hem zelf aanroept. */
     public function get_log(): array {
@@ -177,6 +180,22 @@ class CF7_Healthcheck {
         $this->log[] = $message;
     }
 
+    /**
+     * Zelfde als alert(), maar bewaart de uitslag ook per formulier. Daarmee maakt
+     * de overzichtsmail een nette lijst in plaats van losse regels logtekst.
+     *
+     * @param string $status ok | failed | skipped | note
+     */
+    private function record( string $message, string $status, string $title = '', int $id = 0, string $detail = '' ): void {
+        $this->alert( $message );
+        $this->results[] = [
+            'status' => $status,
+            'title'  => $title,
+            'id'     => $id,
+            'detail' => $detail,
+        ];
+    }
+
     private function count_failures( array $log ): int {
         return count( array_filter( $log, static function ( $line ) {
             return strpos( $line, 'FAILED' ) !== false;
@@ -221,11 +240,18 @@ class CF7_Healthcheck {
         $token = wp_generate_password( 32, false );
         set_transient( self::TOKEN, $token, 10 * MINUTE_IN_SECONDS );
 
-        $this->log = [];
+        $this->log     = [];
+        $this->results = [];
 
         // Contact Form 7 kan gedeactiveerd zijn - dan niet doorgaan (voorkomt fatal error)
         if ( ! class_exists( 'WPCF7_ContactForm' ) ) {
-            $this->alert( 'CF7 healthcheck FAILED: Contact Form 7 is niet actief.' );
+            $this->record(
+                'CF7 healthcheck FAILED: Contact Form 7 is niet actief.',
+                'failed',
+                'Contact Form 7',
+                0,
+                'De plugin is niet actief, er is niets getest.'
+            );
             if ( $send_summary_mail ) {
                 $this->send_summary_mail( $this->log );
             }
@@ -242,31 +268,51 @@ class CF7_Healthcheck {
             $result  = $this->build_payload( $form_id );
 
             if ( ! $result ) {
-                $this->alert( "CF7 healthcheck: kon form '{$form['title']}' (ID {$form_id}) niet laden." );
+                $this->record(
+                    "CF7 healthcheck FAILED voor '{$form['title']}' (ID {$form_id}): formulier kon niet geladen worden.",
+                    'failed',
+                    $form['title'],
+                    $form_id,
+                    'Het formulier kon niet geladen worden.'
+                );
                 continue;
             }
 
             if ( $result['skippable'] ) {
-                $this->alert( "CF7 healthcheck: form '{$form['title']}' (ID {$form_id}) overgeslagen - {$result['reason']}. Handmatige check nodig." );
+                $this->record(
+                    "CF7 healthcheck: form '{$form['title']}' (ID {$form_id}) overgeslagen - {$result['reason']}. Handmatige check nodig.",
+                    'skipped',
+                    $form['title'],
+                    $form_id,
+                    ucfirst( $result['reason'] ) . '. Handmatige check nodig.'
+                );
                 continue;
             }
 
             $testable[] = [ 'form' => $form, 'result' => $result ];
         }
 
-        // Kies willekeurig één formulier dat écht een mail mag versturen. Zo testen
-        // we alle formulieren én SMTP, maar zonder een overvolle mailbox: de rest
-        // wordt wel ingediend en gevalideerd, maar de mail wordt overgeslagen.
+        // Geen enkel formulier mailt. Ze worden wel volledig ingediend en
+        // gevalideerd, maar de mail wordt overgeslagen - je krijgt dus alleen de
+        // overzichtsmail. Die gaat zelf ook via wp_mail en is daarmee meteen de
+        // controle of de site kan mailen.
         //
-        // Elk formulier wordt ingediend via wp_remote_post - dat is een aparte
-        // HTTP-request en dus een ander PHP-proces. Het gekozen formulier-ID delen
-        // we daarom via een transient (database), zodat de skip-mail-filter in dat
-        // andere proces weet welk formulier wél mag mailen.
+        // Wil je toch een échte formuliermail als SMTP-test, dan zet je de filter
+        // hieronder op true; er wordt dan willekeurig één formulier gekozen dat wél
+        // mag mailen. Elk formulier wordt ingediend via wp_remote_post - een aparte
+        // HTTP-request en dus een ander PHP-proces - dus delen we dat formulier-ID
+        // via een transient, zodat de skip-mail-filter daar weet welk formulier mag.
         delete_transient( self::MAIL_FORM );
-        if ( ! empty( $testable ) ) {
+        if ( ! empty( $testable ) && apply_filters( 'db_cf7_healthcheck/smtp_test', false ) ) {
             $chosen = $testable[ array_rand( $testable ) ];
             set_transient( self::MAIL_FORM, (int) $chosen['form']['id'], 5 * MINUTE_IN_SECONDS );
-            $this->alert( "CF7 healthcheck: echte mail wordt alleen verstuurd voor '{$chosen['form']['title']}' (ID {$chosen['form']['id']}) om SMTP te testen; overige formulieren worden getest zonder mail." );
+            $this->record(
+                "CF7 healthcheck: echte mail wordt alleen verstuurd voor '{$chosen['form']['title']}' (ID {$chosen['form']['id']}) om SMTP te testen; overige formulieren worden getest zonder mail.",
+                'note',
+                '',
+                0,
+                "Als SMTP-test is één echte mail verstuurd, via '{$chosen['form']['title']}'."
+            );
         }
 
         foreach ( $testable as $item ) {
@@ -321,7 +367,13 @@ class CF7_Healthcheck {
         ] );
 
         if ( is_wp_error( $response ) ) {
-            $this->alert( "CF7 healthcheck: request failed voor '{$form['title']}' (ID {$form_id}) - " . $response->get_error_message() );
+            $this->record(
+                "CF7 healthcheck FAILED voor '{$form['title']}' (ID {$form_id}): request mislukt - " . $response->get_error_message(),
+                'failed',
+                $form['title'],
+                $form_id,
+                'Het formulier was niet bereikbaar: ' . $response->get_error_message()
+            );
             return;
         }
 
@@ -330,7 +382,7 @@ class CF7_Healthcheck {
         $parsed    = json_decode( $raw_body, true );
 
         if ( ! empty( $parsed['status'] ) && $parsed['status'] === 'mail_sent' ) {
-            $this->alert( "CF7 healthcheck OK voor '{$form['title']}' (ID {$form_id}): mail_sent" );
+            $this->record( "CF7 healthcheck OK voor '{$form['title']}' (ID {$form_id}): mail_sent", 'ok', $form['title'], $form_id );
             return;
         }
 
@@ -345,7 +397,15 @@ class CF7_Healthcheck {
             $errors .= ' - melding: ' . $parsed['message'];
         }
 
-        $this->alert( "CF7 healthcheck FAILED voor '{$form['title']}' (ID {$form_id}): status = " . ( $parsed['status'] ?? 'onbekend' ) . $errors );
+        $status = (string) ( $parsed['status'] ?? 'onbekend' );
+
+        $this->record(
+            "CF7 healthcheck FAILED voor '{$form['title']}' (ID {$form_id}): status = {$status}{$errors}",
+            'failed',
+            $form['title'],
+            $form_id,
+            "Status: {$status}{$errors}"
+        );
     }
 
     /**
@@ -538,11 +598,11 @@ class CF7_Healthcheck {
     }
 
     /**
-     * Onderdrukt tijdens de healthcheck de CF7-mail voor alle formulieren behalve
-     * het willekeurig gekozen formulier (zie transient db_cf7_mail_form_id). Draait
-     * in het REST-proces dat de inzending afhandelt. Het formulier wordt nog steeds
-     * volledig ingediend en gevalideerd - CF7 geeft bij een overgeslagen mail alsnog
-     * status 'mail_sent' terug, dus de OK/FAILED-controle blijft kloppen.
+     * Onderdrukt tijdens de healthcheck de CF7-mail. Draait in het REST-proces dat
+     * de inzending afhandelt. Het formulier wordt nog steeds volledig ingediend en
+     * gevalideerd - CF7 geeft bij een overgeslagen mail alsnog status 'mail_sent'
+     * terug, dus de OK/FAILED-controle blijft kloppen. Alleen als de SMTP-test aan
+     * staat mag één gekozen formulier wél mailen (transient db_cf7_mail_form_id).
      */
     public function maybe_skip_mail( $skip_mail, $contact_form ) {
         $submission = \WPCF7_Submission::get_instance();
@@ -554,7 +614,8 @@ class CF7_Healthcheck {
 
         $mail_form_id = (int) get_transient( self::MAIL_FORM );
 
-        // Geen gekozen formulier bekend? Dan geen mail versturen (voorkomt volle inbox).
+        // Geen gekozen formulier bekend? Dan geen mail versturen - dat is het
+        // normale geval, want de SMTP-test staat standaard uit.
         if ( ! $mail_form_id ) {
             return true;
         }
@@ -598,6 +659,9 @@ class CF7_Healthcheck {
 
     /**
      * Stuurt een overzichtsmail met de uitslag van de healthcheck.
+     *
+     * De mail gaat als HTML de deur uit, met de platte tekst als alternatief
+     * mee (AltBody) voor wie geen HTML krijgt voorgeschoteld.
      */
     private function send_summary_mail( array $log ): void {
         $site = wp_parse_url( home_url(), PHP_URL_HOST );
@@ -619,18 +683,146 @@ class CF7_Healthcheck {
             return;
         }
 
+        // Het onderwerp houdt dezelfde opbouw aan: er staan mailregels op die op
+        // "[CF7 healthcheck]" filteren.
         $subject = $failed
-            ? "⚠️ [CF7 healthcheck] {$failed} PROBLEEM/PROBLEMEN op {$site}"
+            ? sprintf( '⚠️ [CF7 healthcheck] %d %s op %s', $failed, 1 === $failed ? 'probleem' : 'problemen', $site )
             : "✅ [CF7 healthcheck] Alles OK op {$site}";
 
-        $intro = $failed
+        $tekst = $this->summary_text( $log, $failed );
+        $html  = $this->summary_html( (string) $site, $failed );
+
+        // wp_mail kent geen tekstversie naast de HTML; die hangen we er zelf in.
+        $alt = static function ( $phpmailer ) use ( $tekst ) {
+            $phpmailer->AltBody = $tekst;
+        };
+        add_action( 'phpmailer_init', $alt );
+
+        wp_mail( $this->recipient(), $subject, $html, [ 'Content-Type: text/html; charset=UTF-8' ] );
+
+        remove_action( 'phpmailer_init', $alt );
+    }
+
+    /** De uitslag als platte tekst, zoals de mail er vóór 1.9.3 uitzag. */
+    private function summary_text( array $log, int $failed ): string {
+        $tekst  = $failed
             ? "Let op: {$failed} formulier(en) hebben een probleem.\n\n"
             : "Alle formulieren zijn succesvol getest.\n\n";
+        $tekst .= 'Uitgevoerd op: ' . current_time( 'd-m-Y H:i' ) . "\n\n";
+        $tekst .= empty( $log ) ? '(geen formulieren gevonden)' : implode( "\n", $log );
 
-        $bericht  = $intro;
-        $bericht .= "Uitgevoerd op: " . current_time( 'd-m-Y H:i' ) . "\n\n";
-        $bericht .= empty( $log ) ? "(geen formulieren gevonden)" : implode( "\n", $log );
+        return $tekst;
+    }
 
-        wp_mail( $this->recipient(), $subject, $bericht );
+    /**
+     * De uitslag als opgemaakte mail: een gekleurde kop, daaronder de formulieren
+     * gegroepeerd op uitslag. Alles met inline stijlen en tabellen, want mailclients
+     * gooien een <style>-blok of moderne opmaak er net zo makkelijk uit.
+     */
+    private function summary_html( string $site, int $failed ): string {
+        $kapot   = $this->results_with_status( 'failed' );
+        $ok      = $this->results_with_status( 'ok' );
+        $skipped = $this->results_with_status( 'skipped' );
+
+        $accent = $failed ? '#b32d2e' : '#157347';
+        $kop    = $failed
+            ? sprintf( '%d %s gevonden', $failed, 1 === $failed ? 'probleem' : 'problemen' )
+            : 'Alle formulieren werken';
+
+        $getest  = count( $kapot ) + count( $ok );
+        $telling = [ sprintf( '%d %s getest', $getest, 1 === $getest ? 'formulier' : 'formulieren' ) ];
+        if ( $failed ) {
+            $telling[] = sprintf( '%d met een probleem', $failed );
+        }
+        if ( $skipped ) {
+            $telling[] = sprintf( '%d overgeslagen', count( $skipped ) );
+        }
+
+        $rijen  = $this->html_group( 'Problemen', $kapot, '#b32d2e' );
+        $rijen .= $this->html_group( 'In orde', $ok, '#157347' );
+        $rijen .= $this->html_group( 'Overgeslagen', $skipped, '#b26a00' );
+
+        if ( '' === $rijen ) {
+            $rijen = '<tr><td style="padding:14px 28px 0;font-size:14px;color:#646970;">Er zijn geen formulieren gevonden om te testen.</td></tr>';
+        }
+
+        $noten = '';
+        foreach ( $this->results_with_status( 'note' ) as $noot ) {
+            $noten .= '<tr><td style="padding:16px 28px 0;font-size:13px;color:#787c82;line-height:1.5;">'
+                . esc_html( $noot['detail'] ) . '</td></tr>';
+        }
+
+        $font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+
+        return '<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8">'
+            . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<title>' . esc_html( $kop ) . '</title></head>'
+            . '<body style="margin:0;padding:0;background:#f0f0f1;">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f1;padding:24px 12px;">'
+            . '<tr><td align="center">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;font-family:' . $font . ';">'
+
+            . '<tr><td style="background:' . esc_attr( $accent ) . ';padding:22px 28px;">'
+            . '<div style="font-size:19px;font-weight:700;color:#ffffff;line-height:1.3;">' . esc_html( $kop ) . '</div>'
+            . '<div style="margin-top:5px;font-size:13px;color:#ffffff;opacity:0.85;">'
+            . esc_html( $site ) . ' &middot; ' . esc_html( current_time( 'd-m-Y H:i' ) ) . '</div>'
+            . '</td></tr>'
+
+            . '<tr><td style="padding:20px 28px 0;font-size:14px;color:#50575e;">'
+            . esc_html( implode( ' · ', $telling ) ) . '</td></tr>'
+
+            . $rijen
+            . $noten
+
+            . '<tr><td style="padding:24px 28px 26px;">'
+            . '<a href="' . esc_url( admin_url( 'admin.php?page=wpcf7' ) ) . '"'
+            . ' style="display:inline-block;background:#1d2327;color:#ffffff;text-decoration:none;font-size:14px;padding:11px 18px;border-radius:6px;">'
+            . 'Formulieren bekijken</a></td></tr>'
+
+            . '<tr><td style="background:#f6f7f7;padding:15px 28px;font-size:12px;color:#787c82;line-height:1.5;">'
+            . 'Automatische controle van alle Contact Form 7-formulieren, elke nacht om 06:00. '
+            . 'De formulieren zelf versturen daarbij geen mail.</td></tr>'
+
+            . '</table></td></tr></table></body></html>';
+    }
+
+    /** Eén blok in de mail: een kopje met daaronder de formulieren. */
+    private function html_group( string $kop, array $items, string $kleur ): string {
+        if ( empty( $items ) ) {
+            return '';
+        }
+
+        $html = '<tr><td style="padding:20px 28px 2px;font-size:11px;font-weight:700;letter-spacing:0.08em;'
+            . 'text-transform:uppercase;color:#787c82;">' . esc_html( $kop ) . '</td></tr>';
+
+        foreach ( $items as $item ) {
+            $naam = '' !== $item['title'] ? $item['title'] : 'Onbekend formulier';
+            $naam = $item['id']
+                ? '<a href="' . esc_url( admin_url( 'admin.php?page=wpcf7&post=' . (int) $item['id'] . '&action=edit' ) ) . '"'
+                    . ' style="color:#1d2327;text-decoration:none;border-bottom:1px solid #dcdcde;">' . esc_html( $naam ) . '</a>'
+                : esc_html( $naam );
+
+            $detail = '' !== $item['detail']
+                ? '<div style="margin:4px 0 0 18px;font-size:13px;color:#646970;line-height:1.5;">'
+                    . esc_html( $item['detail'] ) . '</div>'
+                : '';
+
+            $html .= '<tr><td style="padding:0 28px;">'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #f0f0f1;">'
+                . '<tr><td style="padding:11px 0;font-size:15px;color:#1d2327;line-height:1.4;">'
+                . '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'
+                . esc_attr( $kleur ) . ';margin-right:10px;"></span>'
+                . $naam . $detail
+                . '</td></tr></table></td></tr>';
+        }
+
+        return $html;
+    }
+
+    /** De uitslagen van deze run met een bepaalde status. */
+    private function results_with_status( string $status ): array {
+        return array_values( array_filter( $this->results, static function ( $item ) use ( $status ) {
+            return $item['status'] === $status;
+        } ) );
     }
 }

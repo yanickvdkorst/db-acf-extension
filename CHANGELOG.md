@@ -1,5 +1,30 @@
 # Changelog ##
 
+## 1.9.3 - 27 Oct 2026
+* **De formulieren zelf mailen niet meer bij de dagelijkse check.** Er ging per
+  run één échte formuliermail uit om de SMTP-instellingen te testen; die kwam
+  bovenop de overzichtsmail in de inbox terecht. Bij een formulier met een
+  bevestigingsmail ("Mail (2)") waren het er zelfs twee, want die tweede mail
+  ging buiten de omleiding om naar het testadres. Voortaan krijg je alleen nog
+  het overzicht.
+* De controle zelf verandert niet: elk formulier wordt nog steeds volledig
+  ingediend en gevalideerd, en de overzichtsmail gaat zelf via `wp_mail` — blijft
+  die uit, dan weet je dat de site niet kan mailen.
+* Wil je die extra SMTP-test toch, zet dan de filter
+  `db_cf7_healthcheck/smtp_test` op true; dan mailt er weer één willekeurig
+  formulier per run.
+* **De overzichtsmail is opgemaakt.** In plaats van een rij logregels krijg je
+  een gekleurde kop (groen of rood), een telling, en daaronder de formulieren
+  gegroepeerd op uitslag: problemen eerst, dan wat in orde is, dan wat is
+  overgeslagen. Elke naam linkt naar dat formulier in de beheeromgeving. De
+  platte tekst gaat als alternatief mee voor wie geen HTML krijgt, en het
+  onderwerp begint nog steeds met `[CF7 healthcheck]`, dus bestaande mailregels
+  blijven werken.
+* **Fix: twee soorten storingen telden niet mee als probleem.** Een formulier
+  dat niet geladen kon worden, en een formulier dat onbereikbaar was (timeout,
+  SSL-fout), kwamen wel in de mail te staan maar niet in de telling — het
+  onderwerp meldde dan "Alles OK". Beide gelden nu als FAILED.
+
 ## 1.9.2 - 27 Oct 2026
 * **Fix: de updatecontrole van 1.9.1 wees elke release af.** De controle op het
   download-adres vergeleek hoofdlettergevoelig, terwijl GitHub eigenaar en repo
