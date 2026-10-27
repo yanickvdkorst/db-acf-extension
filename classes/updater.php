@@ -214,7 +214,11 @@ class Updater {
             // nemen alleen een adres aan dat bij de releases van onze eigen repo
             // hoort. Wijst het antwoord ergens anders heen, dan bieden we liever
             // geen update aan.
-            if ( 0 !== strpos( $url, self::package_prefix() ) ) {
+            //
+            // Hoofdletterongevoelig vergelijken: GitHub geeft eigenaar en repo in
+            // het download-adres kleingeschreven terug, ook als ze met hoofdletters
+            // geregistreerd zijn. Domeinnamen zijn sowieso niet hoofdlettergevoelig.
+            if ( 0 !== stripos( $url, self::package_prefix() ) ) {
                 return '';
             }
 

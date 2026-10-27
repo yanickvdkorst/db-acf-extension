@@ -1,5 +1,14 @@
 # Changelog ##
 
+## 1.9.2 - 27 Oct 2026
+* **Fix: de updatecontrole van 1.9.1 wees elke release af.** De controle op het
+  download-adres vergeleek hoofdlettergevoelig, terwijl GitHub eigenaar en repo
+  kleingeschreven teruggeeft. Daardoor vond de plugin nooit een geldige zip en
+  bood hij geen enkele update meer aan. Er wordt nu hoofdletterongevoelig
+  vergeleken; het weigeren van vreemde domeinen werkt onveranderd.
+* De release 1.9.1 is om die reden ingetrokken. Zit je er toch op, werk dan één
+  keer handmatig bij via Plugins → Nieuwe plugin → Bestand uploaden.
+
 ## 1.9.1 - 27 Oct 2026
 * **Fix: formulieren zonder e-mailveld gingen mis bij de dagelijkse check.** De
   healthcheck herkende zijn eigen inzending aan het testadres in de velden, maar
