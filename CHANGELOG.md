@@ -1,5 +1,32 @@
 # Changelog ##
 
+## 1.9.1 - 27 Oct 2026
+* **Fix: formulieren zonder e-mailveld gingen mis bij de dagelijkse check.** De
+  healthcheck herkende zijn eigen inzending aan het testadres in de velden, maar
+  dat adres wordt alleen in een `email`-veld ingevuld. Een formulier zonder zo'n
+  veld werd daardoor als gewone bezoeker behandeld: de mail ging naar de klant in
+  plaats van naar het monitoring-adres, de inzending kwam in Flamingo terecht en
+  Akismet mocht erover oordelen — met een valse "FAILED ... status = spam" als
+  meest zichtbare gevolg.
+* Elke testinzending draagt nu een geheim mee in de header `X-DB-Healthcheck`,
+  dat alleen geldig is tijdens een lopende run. Dat werkt ongeacht welke velden
+  een formulier heeft. Het testadres blijft als terugval voor het geval een proxy
+  of security-plugin de header wegpoetst.
+* Omdat het geheim maar een paar minuten geldig is, wordt een bezoeker die dat
+  monitoring-adres toevallig invult niet langer als healthcheck gezien; zijn
+  bericht komt gewoon bij de klant aan.
+* **Nieuw: knop "Nu testen"** onderaan Instellingen → DB ACF Extensie. Draait de
+  controle meteen en toont de uitslag per formulier op het scherm; je hoeft dus
+  geen URL meer in te typen. Er gaat bij zo'n handmatige run geen overzichtsmail
+  uit. De knop is afgeschermd met een nonce en vereist beheerdersrechten.
+* De updater accepteert alleen nog een download-adres dat bij de releases van de
+  eigen repo hoort. WordPress installeert zo'n zip zonder handtekeningcontrole,
+  dus een onverwacht antwoord moet niet ergens anders vandaan kunnen installeren.
+* Alle PHP-bestanden weren nu directe aanroep (`ABSPATH`-check), en de twee
+  ongebruikte bestanden `compat.php` en `classes/requirements.php` zijn
+  weggehaald; die verwezen naar constanten die niet bestaan en zouden op PHP 8
+  een fatal error geven als iemand ze ooit inschakelde.
+
 ## 1.9.0 - 26 Oct 2026
 * **Nieuw: je kiest per site wat de plugin doet.** Onder **Instellingen → DB ACF
   Extensie** staan drie schakelaars:

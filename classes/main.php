@@ -2,6 +2,10 @@
 
 namespace DB_ACF_UI;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 trait Singleton {
     private static $instance;
 

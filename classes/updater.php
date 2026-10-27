@@ -2,6 +2,10 @@
 
 namespace DB_ACF_UI;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /**
  * Auto-update vanaf GitHub Releases.
  *
@@ -200,12 +204,29 @@ class Updater {
         $wanted = DB_ACF_UI_SLUG . '.zip';
 
         foreach ( (array) ( $data->assets ?? [] ) as $asset ) {
-            if ( isset( $asset->name, $asset->browser_download_url ) && $wanted === $asset->name ) {
-                return (string) $asset->browser_download_url;
+            if ( ! isset( $asset->name, $asset->browser_download_url ) || $wanted !== $asset->name ) {
+                continue;
             }
+
+            $url = (string) $asset->browser_download_url;
+
+            // WordPress installeert dit zipje zonder handtekeningcontrole, dus we
+            // nemen alleen een adres aan dat bij de releases van onze eigen repo
+            // hoort. Wijst het antwoord ergens anders heen, dan bieden we liever
+            // geen update aan.
+            if ( 0 !== strpos( $url, self::package_prefix() ) ) {
+                return '';
+            }
+
+            return $url;
         }
 
         return '';
+    }
+
+    /** Waar een geldige release-zip vandaan moet komen. */
+    private static function package_prefix(): string {
+        return 'https://github.com/' . self::repo() . '/releases/download/';
     }
 
     private static function repo(): string {

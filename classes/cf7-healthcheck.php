@@ -2,6 +2,10 @@
 
 namespace DB_ACF_UI;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /**
  * Dagelijkse healthcheck op de Contact Form 7-formulieren van deze site.
  *
@@ -36,8 +40,19 @@ class CF7_Healthcheck {
     /** Het formulier dat deze run wél mag mailen. */
     private const MAIL_FORM = 'db_cf7_mail_form_id';
 
+    /** Geheim waaraan de inzendingen van deze run te herkennen zijn. */
+    private const TOKEN = 'db_cf7_token';
+
+    /** De header waarin dat geheim meereist. */
+    private const HEADER = 'X-DB-Healthcheck';
+
     /** Meldingen van de lopende run. */
     private array $log = [];
+
+    /** De meldingen van de laatste run, voor wie hem zelf aanroept. */
+    public function get_log(): array {
+        return $this->log;
+    }
 
     public function register(): void {
         if ( ! apply_filters( 'db_cf7_healthcheck/enabled', true ) ) {
@@ -104,6 +119,7 @@ class CF7_Healthcheck {
 
         delete_transient( self::RUN_LOCK );
         delete_transient( self::MAIL_FORM );
+        delete_transient( self::TOKEN );
     }
 
     // ─── Adressen en instellingen ──────────────────────────────────────────
@@ -199,6 +215,12 @@ class CF7_Healthcheck {
         }
         set_transient( self::RUN_LOCK, 1, 10 * MINUTE_IN_SECONDS );
 
+        // Geheim voor deze run. Elke inzending krijgt het als header mee, zodat
+        // het REST-proces (een andere PHP-request) weet dat wij het zijn — ook
+        // bij een formulier zonder e-mailveld.
+        $token = wp_generate_password( 32, false );
+        set_transient( self::TOKEN, $token, 10 * MINUTE_IN_SECONDS );
+
         $this->log = [];
 
         // Contact Form 7 kan gedeactiveerd zijn - dan niet doorgaan (voorkomt fatal error)
@@ -207,6 +229,7 @@ class CF7_Healthcheck {
             if ( $send_summary_mail ) {
                 $this->send_summary_mail( $this->log );
             }
+            delete_transient( self::TOKEN );
             delete_transient( self::RUN_LOCK );
             return;
         }
@@ -247,10 +270,11 @@ class CF7_Healthcheck {
         }
 
         foreach ( $testable as $item ) {
-            $this->submit( $item['form'], $item['result'] );
+            $this->submit( $item['form'], $item['result'], $token );
         }
 
         delete_transient( self::MAIL_FORM );
+        delete_transient( self::TOKEN );
 
         if ( $send_summary_mail ) {
             $this->send_summary_mail( $this->log );
@@ -262,7 +286,7 @@ class CF7_Healthcheck {
     /**
      * Dient één formulier in op het REST-endpoint van CF7 en beoordeelt het antwoord.
      */
-    private function submit( array $form, array $result ): void {
+    private function submit( array $form, array $result, string $token = '' ): void {
         $form_id = $form['id'];
         $url     = rest_url( "contact-form-7/v1/contact-forms/{$form_id}/feedback" );
 
@@ -288,7 +312,10 @@ class CF7_Healthcheck {
         $body .= "--{$boundary}--\r\n";
 
         $response = wp_remote_post( $url, [
-            'headers' => [ 'Content-Type' => 'multipart/form-data; boundary=' . $boundary ],
+            'headers' => [
+                'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
+                self::HEADER   => $token,
+            ],
             'body'    => $body,
             'timeout' => 15, // hangend endpoint mag de hele run niet blokkeren
         ] );
@@ -471,9 +498,37 @@ class CF7_Healthcheck {
     // ─── Hooks tijdens een testinzending ───────────────────────────────────
 
     /**
-     * Herkent een healthcheck-inzending aan het testadres in eender welk veld.
+     * Is dit een inzending van de healthcheck zelf?
+     *
+     * In de eerste plaats aan de header te zien: die reist mee ongeacht welke
+     * velden een formulier heeft. Vroeger keken we alleen naar het testadres in
+     * de veldwaarden, maar een formulier zonder e-mailveld kreeg dat nooit —
+     * zo'n inzending werd als gewone bezoeker behandeld en kon dus bij de klant
+     * en in Flamingo belanden.
+     *
+     * Het testadres blijft als terugval, voor als een proxy of security-plugin
+     * de header wegpoetst. Alleen tijdens een lopende run: buiten die paar
+     * minuten komt een bezoeker die dit adres toevallig invult gewoon door.
      */
-    public function is_healthcheck_submission( $data ): bool {
+    public function is_healthcheck_request( $submission = null ): bool {
+        $token = (string) get_transient( self::TOKEN );
+
+        if ( '' === $token ) {
+            return false; // er loopt geen healthcheck
+        }
+
+        $key    = 'HTTP_' . strtoupper( str_replace( '-', '_', self::HEADER ) );
+        $header = isset( $_SERVER[ $key ] ) ? (string) wp_unslash( $_SERVER[ $key ] ) : '';
+
+        if ( '' !== $header && hash_equals( $token, $header ) ) {
+            return true;
+        }
+
+        return $submission && $this->data_has_test_email( $submission->get_posted_data() );
+    }
+
+    /** Staat het testadres in een van de velden? */
+    public function data_has_test_email( $data ): bool {
         foreach ( (array) $data as $value ) {
             if ( in_array( $this->test_email(), (array) $value, true ) ) {
                 return true;
@@ -493,7 +548,7 @@ class CF7_Healthcheck {
         $submission = \WPCF7_Submission::get_instance();
 
         // Alleen ingrijpen bij healthcheck-inzendingen; echte bezoekers nooit.
-        if ( ! $submission || ! $this->is_healthcheck_submission( $submission->get_posted_data() ) ) {
+        if ( ! $submission || ! $this->is_healthcheck_request( $submission ) ) {
             return $skip_mail;
         }
 
@@ -515,7 +570,7 @@ class CF7_Healthcheck {
             return;
         }
 
-        if ( $this->is_healthcheck_submission( $submission->get_posted_data() ) ) {
+        if ( $this->is_healthcheck_request( $submission ) ) {
             $mail              = $contact_form->prop( 'mail' );
             $mail['recipient'] = $this->recipient();
             $contact_form->set_properties( [ 'mail' => $mail ] );
@@ -525,7 +580,7 @@ class CF7_Healthcheck {
     /** Sla healthcheck-inzendingen niet op in Flamingo (voorkomt een vervuilde inbox). */
     public function skip_flamingo( $cases ) {
         $submission = \WPCF7_Submission::get_instance();
-        if ( $submission && $this->is_healthcheck_submission( $submission->get_posted_data() ) ) {
+        if ( $submission && $this->is_healthcheck_request( $submission ) ) {
             return []; // geen enkele status -> Flamingo slaat deze inzending niet op
         }
         return $cases;
@@ -533,7 +588,7 @@ class CF7_Healthcheck {
 
     /** Laat Akismet de healthcheck-inzending niet als spam markeren (voorkomt valse FAILED). */
     public function skip_spam_check( $skip, $submission ) {
-        if ( $submission && $this->is_healthcheck_submission( $submission->get_posted_data() ) ) {
+        if ( $submission && $this->is_healthcheck_request( $submission ) ) {
             return true;
         }
         return $skip;

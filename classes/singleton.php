@@ -2,6 +2,10 @@
 
 namespace DB_ACF_UI;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /**
  * Singleton base class for having singleton implementation
  * This allows you to have only one instance of the needed object

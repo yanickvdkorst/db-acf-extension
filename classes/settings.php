@@ -2,6 +2,10 @@
 
 namespace DB_ACF_UI;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /**
  * Instellingenpagina: welke onderdelen van de plugin draaien op deze site?
  *
@@ -22,6 +26,12 @@ class Settings {
     public const OPTION = 'db_acf_ui_modules';
 
     private const PAGE_SLUG = 'db-acf-ui-modules';
+
+    /** admin-post actie achter de knop "Nu testen". */
+    private const RUN_ACTION = 'db_acf_ui_run_cf7_test';
+
+    /** Waar de uitslag van die run tijdelijk staat, tot de pagina hem toont. */
+    private const RESULT_KEY = 'db_acf_ui_cf7_result_';
 
     /**
      * De onderdelen, met de tekst die op de instellingenpagina komt.
@@ -63,7 +73,46 @@ class Settings {
     public function register(): void {
         add_action( 'admin_menu', [ $this, 'add_page' ] );
         add_action( 'admin_init', [ $this, 'register_setting' ] );
+        add_action( 'admin_post_' . self::RUN_ACTION, [ $this, 'run_cf7_test' ] );
         add_filter( 'plugin_action_links_' . plugin_basename( DB_ACF_UI_FILE ), [ $this, 'action_link' ] );
+    }
+
+    /**
+     * De knop "Nu testen" op de instellingenpagina: draait de formulier-check
+     * meteen en zet de uitslag klaar voor het scherm.
+     *
+     * Anders dan de nachtelijke run gaat er geen overzichtsmail uit — je ziet
+     * het resultaat immers voor je neus.
+     */
+    public function run_cf7_test(): void {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'Geen toegang.', 'db-acf-ui' ) );
+        }
+
+        check_admin_referer( self::RUN_ACTION );
+
+        // Dezelfde twee voorwaarden als voor de knop zelf: de pagina toont hem
+        // niet in deze gevallen, maar het verzoek moet er ook niet langs kunnen.
+        if ( ! self::enabled( 'cf7_healthcheck' ) ) {
+            wp_die( esc_html__( 'De formulier-check staat uit op deze site.', 'db-acf-ui' ) );
+        }
+
+        if ( function_exists( 'db_run_cf7_test' ) ) {
+            wp_die( esc_html__( 'Het thema draait zijn eigen versie van deze controle.', 'db-acf-ui' ) );
+        }
+
+        $healthcheck = new CF7_Healthcheck();
+
+        // Een achtergebleven lock van een afgebroken run mag een bewuste klik
+        // niet stil blokkeren.
+        delete_transient( 'db_cf7_running' );
+
+        $healthcheck->run( false );
+
+        set_transient( self::RESULT_KEY . get_current_user_id(), $healthcheck->get_log(), 5 * MINUTE_IN_SECONDS );
+
+        wp_safe_redirect( add_query_arg( 'db-acf-tested', '1', admin_url( 'options-general.php?page=' . self::PAGE_SLUG ) ) );
+        exit;
     }
 
     public function add_page(): void {
@@ -168,7 +217,74 @@ class Settings {
 
                 <?php submit_button(); ?>
             </form>
+
+            <?php $this->render_cf7_test_box(); ?>
         </div>
+        <?php
+    }
+
+    /**
+     * Het blokje onderaan: knop om de formulier-check nu te draaien, en de
+     * uitslag van de vorige klik.
+     */
+    private function render_cf7_test_box(): void {
+        if ( ! self::enabled( 'cf7_healthcheck' ) ) {
+            return;
+        }
+
+        $sleutel = self::RESULT_KEY . get_current_user_id();
+        $log     = get_transient( $sleutel );
+        if ( false !== $log ) {
+            delete_transient( $sleutel );
+        }
+        ?>
+        <hr>
+        <h2><?php esc_html_e( 'Formulieren nu testen', 'db-acf-ui' ); ?></h2>
+        <p>
+            <?php esc_html_e( 'Draait de controle meteen, zonder op vannacht te wachten. Alle formulieren worden ingediend; er gaat geen overzichtsmail uit. Bij veel formulieren duurt dit even.', 'db-acf-ui' ); ?>
+        </p>
+
+        <?php if ( function_exists( 'db_run_cf7_test' ) ) : ?>
+            <p class="description" style="color:#b32d2e">
+                <?php esc_html_e( 'Het thema bevat nog een eigen versie van deze controle; die heeft voorrang. Haal het blok uit functions-root.php om deze knop te gebruiken.', 'db-acf-ui' ); ?>
+            </p>
+            <?php return; ?>
+        <?php endif; ?>
+
+        <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+            <input type="hidden" name="action" value="<?php echo esc_attr( self::RUN_ACTION ); ?>">
+            <?php wp_nonce_field( self::RUN_ACTION ); ?>
+            <?php submit_button( __( 'Nu testen', 'db-acf-ui' ), 'secondary', 'submit', false ); ?>
+        </form>
+
+        <?php if ( is_array( $log ) ) : ?>
+            <?php
+            $mislukt = count( array_filter( $log, static function ( $regel ) {
+                return false !== strpos( $regel, 'FAILED' );
+            } ) );
+            ?>
+            <div class="notice <?php echo $mislukt ? 'notice-error' : 'notice-success'; ?>" style="margin-top:1em">
+                <p>
+                    <strong>
+                        <?php
+                        if ( empty( $log ) ) {
+                            esc_html_e( 'Geen formulieren gevonden.', 'db-acf-ui' );
+                        } elseif ( $mislukt ) {
+                            printf(
+                                esc_html( _n( '%d probleem gevonden.', '%d problemen gevonden.', $mislukt, 'db-acf-ui' ) ),
+                                (int) $mislukt
+                            );
+                        } else {
+                            esc_html_e( 'Alles OK.', 'db-acf-ui' );
+                        }
+                        ?>
+                    </strong>
+                </p>
+                <?php if ( ! empty( $log ) ) : ?>
+                    <pre style="white-space:pre-wrap;margin:0 0 1em"><?php echo esc_html( implode( "\n", $log ) ); ?></pre>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
         <?php
     }
 
