@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   db_cf7_healthcheck/recipient          — ontvanger van de overzichtsmail
  *   db_cf7_healthcheck/test_email         — adres waaraan een testinzending te herkennen is
  *   db_cf7_healthcheck/notify_on_success  — op false: alleen mailen bij problemen
- *   db_cf7_healthcheck/staging_hosts      — domeinen die nooit mailen
+ *   db_cf7_healthcheck/staging_hosts      — domeinen die nooit mailen, ook de formulieren niet
  *   db_cf7_healthcheck/smtp_test          — op true: één formulier mailt écht, als SMTP-test
  */
 class CF7_Healthcheck {
@@ -129,6 +129,47 @@ class CF7_Healthcheck {
 
     private function recipient(): string {
         return (string) apply_filters( 'db_cf7_healthcheck/recipient', 'wordpress@digitalebazen.nl' );
+    }
+
+    /**
+     * Draait deze site op een test-/stagingomgeving?
+     *
+     * Er wordt naar twee hosts gekeken. home_url() is de normale bron, maar een
+     * kopie die naar staging is gezet zonder de URL's bij te werken heeft daar
+     * nog het productiedomein staan; dan verraadt de host van het verzoek het
+     * alsnog. Eén van de twee is genoeg om niets te versturen - bij twijfel
+     * liever geen mail dan een mail vanaf een kopie.
+     */
+    private function is_staging(): bool {
+        $suffixen = (array) apply_filters( 'db_cf7_healthcheck/staging_hosts', [ '.ontwikkelbazen.nl' ] );
+
+        $hosts = [ (string) wp_parse_url( home_url(), PHP_URL_HOST ) ];
+        if ( ! empty( $_SERVER['HTTP_HOST'] ) ) {
+            $hosts[] = (string) wp_unslash( $_SERVER['HTTP_HOST'] );
+        }
+
+        foreach ( $hosts as $host ) {
+            $host = strtolower( trim( $host ) );
+            $host = explode( ':', $host )[0]; // een poortnummer hoort niet bij de hostnaam
+
+            if ( '' === $host ) {
+                continue;
+            }
+
+            foreach ( $suffixen as $suffix ) {
+                $suffix = strtolower( trim( (string) $suffix ) );
+                if ( '' === $suffix ) {
+                    continue;
+                }
+
+                // '.ontwikkelbazen.nl' dekt ook het kale 'ontwikkelbazen.nl'.
+                if ( $host === ltrim( $suffix, '.' ) || substr( $host, -strlen( $suffix ) ) === $suffix ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function test_email(): string {
@@ -303,7 +344,7 @@ class CF7_Healthcheck {
         // HTTP-request en dus een ander PHP-proces - dus delen we dat formulier-ID
         // via een transient, zodat de skip-mail-filter daar weet welk formulier mag.
         delete_transient( self::MAIL_FORM );
-        if ( ! empty( $testable ) && apply_filters( 'db_cf7_healthcheck/smtp_test', false ) ) {
+        if ( ! empty( $testable ) && apply_filters( 'db_cf7_healthcheck/smtp_test', false ) && ! $this->is_staging() ) {
             $chosen = $testable[ array_rand( $testable ) ];
             set_transient( self::MAIL_FORM, (int) $chosen['form']['id'], 5 * MINUTE_IN_SECONDS );
             $this->record(
@@ -605,6 +646,14 @@ class CF7_Healthcheck {
      * staat mag één gekozen formulier wél mailen (transient db_cf7_mail_form_id).
      */
     public function maybe_skip_mail( $skip_mail, $contact_form ) {
+        // Op een testomgeving mag er tijdens een run niets de deur uit. Dit staat
+        // bewust vóór de herkenning hieronder: juist een inzending die we níét als
+        // healthcheck herkennen zou anders de mail van een klant versturen vanaf
+        // een kopie van de site.
+        if ( get_transient( self::RUN_LOCK ) && $this->is_staging() ) {
+            return true;
+        }
+
         $submission = \WPCF7_Submission::get_instance();
 
         // Alleen ingrijpen bij healthcheck-inzendingen; echte bezoekers nooit.
@@ -666,13 +715,9 @@ class CF7_Healthcheck {
     private function send_summary_mail( array $log ): void {
         $site = wp_parse_url( home_url(), PHP_URL_HOST );
 
-        // Geen mails versturen vanaf test-/staging-omgevingen
-        $staging = (array) apply_filters( 'db_cf7_healthcheck/staging_hosts', [ '.ontwikkelbazen.nl' ] );
-        foreach ( $staging as $suffix ) {
-            if ( $site && $suffix !== '' && substr( $site, -strlen( $suffix ) ) === $suffix ) {
-                error_log( "[CF7 healthcheck] Overzichtsmail overgeslagen op testomgeving {$site}" );
-                return;
-            }
+        if ( $this->is_staging() ) {
+            error_log( "[CF7 healthcheck] Overzichtsmail overgeslagen op testomgeving {$site}" );
+            return;
         }
 
         $failed = $this->count_failures( $log );

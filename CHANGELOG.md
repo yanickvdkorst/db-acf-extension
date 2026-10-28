@@ -1,5 +1,20 @@
 # Changelog ##
 
+## 1.9.4 - 28 Oct 2026
+* **Fix: een stagingomgeving kon toch mailen.** De blokkade op
+  `*.ontwikkelbazen.nl` gold alleen voor de overzichtsmail. Het formulier dat
+  per run écht mocht mailen (tot 1.9.3) ging er gewoon uit, en een inzending die
+  niet als healthcheck herkend werd, stuurde de mail van de klant — vanaf een
+  kopie van de site. Tijdens een run op een testomgeving wordt nu élke
+  formuliermail tegengehouden, ook een die we niet herkennen, en de SMTP-test
+  wordt daar helemaal overgeslagen.
+* De check kijkt nu ook naar de host van het verzoek, niet alleen naar
+  `home_url()`. Een kopie die naar staging is gezet zonder de URL's bij te
+  werken heeft daar nog het productiedomein staan en werd zo niet als
+  testomgeving herkend.
+* `.ontwikkelbazen.nl` dekt voortaan ook het kale `ontwikkelbazen.nl`, en een
+  poortnummer in de hostnaam zit de herkenning niet meer in de weg.
+
 ## 1.9.3 - 27 Oct 2026
 * **De formulieren zelf mailen niet meer bij de dagelijkse check.** Er ging per
   run één échte formuliermail uit om de SMTP-instellingen te testen; die kwam
